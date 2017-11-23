@@ -19,3 +19,23 @@ $ econsole eth0 00:0c:6b:24:d2:c8 0
 You may have to modify /etc/securetty
 Look at what 'login' logs.
 Add for example 'pts/1'.
+
+
+## Android 
+
+Its possible to use getty in android by compiling it into the firmware:
+
+Adding to build system:
+
+```
+PRODUCT_PACKAGES += egetty
+```
+
+Adding as a service for a known interface:
+
+```
+service usbswitchd /system/bin/usbswitchd
+    class main
+    user root
+```
+
