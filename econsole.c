@@ -43,6 +43,8 @@ struct {
 	int console;
 	int devsocket;
 	int scan;
+	int devices;
+	int shell;
 	int ucast;
 	int row, col;
 	int s;
@@ -268,117 +270,128 @@ static int console_scan(int s, int ifindex, struct sk_buff *skb)
 	return 0;
 }
 
-
-int main(int argc, char **argv)
+static void timespec_diff(struct timespec *start, struct timespec *stop, struct timespec *result)
 {
+	if ((stop->tv_nsec - start->tv_nsec) < 0) {
+		result->tv_sec = stop->tv_sec - start->tv_sec - 1;
+		result->tv_nsec = stop->tv_nsec - start->tv_nsec + 1000000000;
+	} else {
+		result->tv_sec = stop->tv_sec - start->tv_sec;
+		result->tv_nsec = stop->tv_nsec - start->tv_nsec;
+    }
+
+	return;
+}
+
+//Returns the seconds passed from given ts
+static int seconds_elapsed_from(struct timespec *ts)
+{
+	struct timespec now_ts,diff_ts;
+	clock_gettime(CLOCK_MONOTONIC_RAW,&now_ts);
+	
+	timespec_diff(ts,&now_ts,&diff_ts);
+	
+	return diff_ts.tv_sec;
+	
+}
+
+static int console_devices(int s, int ifindex, struct sk_buff *skb)
+{
+	int rc;
+	uint8_t *buf, *p;
+	int n;
+	struct timespec start_ts;
 	struct sockaddr_ll from;
 	socklen_t fromlen = sizeof(from);
-	char *device = "eth0", *ps;
-	uint8_t *buf, *p;
-	int n, i, err=0;
+	int i;
 	unsigned int len;
-	struct sk_buff *skb;
-
-	conf.ifindex=-1;
-	conf.debug = 0;
-
-	if(jelopt(argv, 'h', "help", NULL, &err)) {
-		printf("econsole [DEV] [CONSOLE] [DESTMAC] [(scan|debug)]\n"); 
-		exit(0);
+	int rec_n;
+	
+	p = skb_push(skb, 4);
+	*p++ = EGETTY_SCAN;
+	*p++ = conf.console;
+	*p++ = skb->len >> 8;
+	*p = skb->len & 0xff;
+	
+	rc = console_bcast(s, ifindex, skb);
+	if(rc == -1) {
+		fprintf(stderr, "sendto failed: %s\n", strerror(errno));
+		return -1;
 	}
-	argc = jelopt_final(argv, &err);
-	if(err) {
-		printf("Syntax error in arguments.\n");
-		exit(2);
-	}
-
-	while(--argc > 0) {
-		if(strcmp(argv[argc], "scan")==0) {
-			printf("Scanning for econsoles\n");
-			conf.scan = 1;
-			continue;
+	
+	struct pollfd fds[1];
+	fds[0].fd = conf.s;
+	fds[0].events = POLLIN;
+	fds[0].revents = 0;
+	
+	clock_gettime(CLOCK_MONOTONIC_RAW,&start_ts);
+	
+	while(1){
+		
+		n = poll(fds,1,3000);
+		if (seconds_elapsed_from(&start_ts) > 3){//Time Elapsed
+			break;
 		}
-		if(strcmp(argv[argc], "debug")==0) {
-			printf("Debug mode\n");
-			conf.debug++;
-			continue;
-		}
-		if( (strlen(argv[argc]) < 3) && isdigit(*argv[argc])) {
-			conf.console = atoi(argv[argc]);
-			continue;
-		}
-		if(strchr(argv[argc], ':' )) {
-			unsigned int a;
-			ps = argv[argc];
-			for(i=0;i<6;i++) {
-				sscanf(ps, "%x", &a);
-				conf.dest.sll_addr[i] = a;
-				ps = strchr(ps, ':');
-				if(!ps) break;
-				ps++;
+		
+		if (n == 1){
+			skb_reset(skb);
+			buf = skb_put(skb, 0);
+			rec_n = recvfrom(conf.s, buf, skb_tailroom(skb), 0, (struct sockaddr *)&from, &fromlen);
+			if(rec_n == -1) {
+				fprintf(stderr, "recvfrom() failed. ifconfig up?\n");
+				continue;
 			}
-			conf.ucast = 1;
-			continue;
-		} else {
-			device = argv[argc];
-		}
-	}
-	
-	conf.devsocket = devsocket();
-	
-	while(set_flag(device, (IFF_UP | IFF_RUNNING))) {
-		printf("Waiting for interface to be available\n");
-		sleep(1);
-	}
-	
-	if(device)
-	{
-		conf.ifindex = if_nametoindex(device);
-		if(!conf.ifindex)
-		{
-			fprintf(stderr, "no such device %s\n", device);
-			exit(1);
-		}
-	}
+			skb_put(skb, rec_n);
 
-	conf.s = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_EGETTY));
-	if(conf.s == -1)
-	{
-		fprintf(stderr, "socket(): %s\n", strerror(errno));
-		exit(1);
-	}
-
-
-	if(conf.ifindex >= 0)
-	{
-		struct sockaddr_ll addr;
-		memset(&addr, 0, sizeof(addr));
+			if(conf.ucast)
+				if(memcmp(conf.dest.sll_addr, from.sll_addr, 6))
+					continue;
 		
-		addr.sll_family = AF_PACKET;
-		addr.sll_protocol = htons(ETH_P_EGETTY);
-		addr.sll_ifindex = conf.ifindex;
-		
-		if(bind(conf.s, (const struct sockaddr *)&addr, sizeof(addr)))
-		{
-			fprintf(stderr, "bind failed: %s\n", strerror(errno));
-			exit(1);
+			if(ntohs(from.sll_protocol) == ETH_P_EGETTY) {
+				if(conf.debug) printf("Received EGETTY\n");
+				p = skb->data;
+				if(*p == EGETTY_HELLO) {
+						p++;
+						printf("Console: %d ", *p);
+						for(i=0;i<6;i++)
+							printf("%02x%s", from.sll_addr[i], i==5?"":":");
+						printf("\n");
+					continue;
+				}
+			}
+			
+		}else if (n == 0){//Timeout
+			break;
 		}
+		
+		
 	}
+	console_hup(conf.s, conf.ifindex);
+	//tcsetattr(0, TCSANOW, &conf.term);
+	
+				
+	return 0;
+}
 
-	if(!conf.scan) {
-		terminal_settings();
-		signals_init();
-		winch_handler(0);
-		fprintf(stderr, "Use CTRL-] to close connection.\n");
+static int console_shell(int s, int ifindex, struct sk_buff *skb)
+{
+	int n;
+	int poll_n; 
+	uint8_t *buf, *p;
+	int i;
+	struct sockaddr_ll from;
+	socklen_t fromlen = sizeof(from);
+	unsigned int len;
+	int rc;
+	
+	
+	rc = console_bcast(s, ifindex, skb);
+	if(rc == -1) {
+		fprintf(stderr, "sendto failed: %s\n", strerror(errno));
+		return -1;
 	}
-
-	skb = alloc_skb(1500);
-
-	if(conf.scan)
-		console_scan(conf.s, conf.ifindex, skb);
-
-	while(1)
-	{
+	
+	while(1){
 		struct pollfd fds[2];
 
 		fds[0].fd = 0;
@@ -389,8 +402,8 @@ int main(int argc, char **argv)
 		fds[1].events = POLLIN;
 		fds[1].revents = 0;
 
-		n = poll(fds, 2, -1);
-		if(n == 0) {
+		poll_n = poll(fds, 2, -1);
+		if(poll_n == 0) {
 			printf("timeout\n");
 			continue;
 		}
@@ -419,6 +432,7 @@ int main(int argc, char **argv)
 			skb_put(skb, n);
 			if(!conf.scan) console_put(conf.s, conf.ifindex, skb);
 		}
+		
 		if(fds[1].revents) {
 			skb_reset(skb);
 			buf = skb_put(skb, 0);
@@ -460,6 +474,134 @@ int main(int argc, char **argv)
 		}
 		
 	}
+}
+
+int main(int argc, char **argv)
+{
+
+	char *device = "eth0", *ps;
+	uint8_t *buf, *p;
+	int i, err=0;
+	unsigned int len;
+	struct sk_buff *skb;
+
+	conf.ifindex=-1;
+	conf.debug = 0;
+	conf.devices = 0;
+	conf.shell = 0;
+
+	if(jelopt(argv, 'h', "help", NULL, &err)) {
+		printf("econsole [DEV] [CONSOLE] [DESTMAC] [(scan|debug)]\n"); 
+		printf("econsole [DEV] [CONSOLE] [DESTMAC] [(devices)] - list available consoles\n");
+		printf("econsole [DEV] [CONSOLE] [DESTMAC] [(shell)] - get shell\n");
+		printf("ex. 'sudo econsole eth0 shell' \n");
+		exit(0);
+	}
+	argc = jelopt_final(argv, &err);
+	if(err) {
+		printf("Syntax error in arguments.\n");
+		exit(2);
+	}
+
+	while(--argc > 0) {
+		if(strcmp(argv[argc], "scan")==0) {
+			printf("Scanning for econsoles\n");
+			conf.scan = 1;
+			continue;
+		}
+		if(strcmp(argv[argc], "devices")==0) {
+			printf("egetty devices:\n");
+			conf.devices = 1;
+			continue;
+		}
+		if (strcmp(argv[argc],"shell") == 0){
+			conf.shell = 1;
+			continue;
+		}
+		
+		if(strcmp(argv[argc], "debug")==0) {
+			printf("Debug mode\n");
+			conf.debug++;
+			continue;
+		}
+		if( (strlen(argv[argc]) < 3) && isdigit(*argv[argc])) {
+			conf.console = atoi(argv[argc]);
+			continue;
+		}
+		if(strchr(argv[argc], ':' )) {
+			unsigned int a;
+			ps = argv[argc];
+			for(i=0;i<6;i++) {
+				sscanf(ps, "%x", &a);
+				conf.dest.sll_addr[i] = a;
+				ps = strchr(ps, ':');
+				if(!ps) break;
+				ps++;
+			}
+			conf.ucast = 1;
+			continue;
+		} else {
+			device = argv[argc];
+		}
+	}
+	
+	conf.devsocket = devsocket();
+	
+	while(set_flag(device, (IFF_UP | IFF_RUNNING))) {
+		printf("Waiting for interface [%s] to be available \n",device);
+		sleep(1);
+	}
+	
+	if(device)
+	{
+		conf.ifindex = if_nametoindex(device);
+		if(!conf.ifindex)
+		{
+			fprintf(stderr, "no such device %s\n", device);
+			exit(1);
+		}
+	}
+
+	conf.s = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_EGETTY));
+	if(conf.s == -1)
+	{
+		fprintf(stderr, "socket(): %s\n", strerror(errno));
+		exit(1);
+	}
+
+
+	if(conf.ifindex >= 0)
+	{
+		struct sockaddr_ll addr;
+		memset(&addr, 0, sizeof(addr));
+		
+		addr.sll_family = AF_PACKET;
+		addr.sll_protocol = htons(ETH_P_EGETTY);
+		addr.sll_ifindex = conf.ifindex;
+		
+		if(bind(conf.s, (const struct sockaddr *)&addr, sizeof(addr)))
+		{
+			fprintf(stderr, "bind failed: %s\n", strerror(errno));
+			exit(1);
+		}
+	}
+
+	if(conf.shell == 1) {
+		terminal_settings();
+		signals_init();
+		winch_handler(0);
+		fprintf(stderr, "Use CTRL-] to close connection.\n");
+	}
+
+	skb = alloc_skb(1500);
+
+	if(conf.scan)
+		console_scan(conf.s, conf.ifindex, skb);
+	if (conf.devices){
+		console_devices(conf.s,conf.ifindex,skb);
+	}
+	console_shell(conf.s,conf.ifindex,skb);
+	
 	
 	exit(0);
 }

@@ -112,6 +112,32 @@ int putfd(int fd, char *s)
 	return 0;
 }
 
+pid_t logcat(int *fd)
+{
+	pid_t pid;
+	int amaster, tty, rc=0;
+	char name[256];
+
+	pid = forkpty(&amaster, name,NULL, NULL);
+	if(pid == 0) {
+		
+		if (access("/system/bin/logcat",F_OK) != -1){
+			char *argv[]={"/system/bin/logcat", "--", 0, 0};
+			(void) execve( argv[0], argv, envp );
+			printf("execve failed\n");
+			exit(1);
+		}else{
+			printf("/system/bin/logcat could not be found \n");
+			exit(1);
+		}
+		
+	}
+	if(pid == -1) return -1;
+	*fd = amaster;
+
+	return pid;
+}
+
 pid_t login(int *fd)
 {
 	pid_t pid;
@@ -164,12 +190,6 @@ pid_t login(int *fd)
 			printf("execve failed\n");
 			exit(1);
 		}
-		
-		//char *argv[]={"/system/bin/sh", "--", 0, 0};
-		//char *argv[]={"/bin/login", "--", 0, 0};
-		//(void) execve( argv[0], argv, envp );
-		//printf("execve failed\n");
-		//exit(1);
 	}
 	if(pid == -1) return -1;
 	*fd = amaster;
@@ -256,7 +276,7 @@ int main(int argc, char **argv, char **arge)
 	uint8_t *buf, *p;
 	ssize_t n;
 	unsigned int len;
-	int count=1;
+	//int count=1;
 	int timeout = -1;
 	int loginfd = -1;
 	pid_t pid=-1;
@@ -344,7 +364,7 @@ int main(int argc, char **argv, char **arge)
 	skb_reserve(skb, 4);
 	console_hello(s, ifindex, skb);
 	
-	while(count)
+	while(1)
 	{
 		struct pollfd fds[2];
 
