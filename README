@@ -34,7 +34,7 @@ PRODUCT_PACKAGES += egetty
 Adding as a service for a known interface:
 
 ```
-service usbswitchd /system/bin/usbswitchd
+service egetty /system/bin/egetty eth0
     class main
     user root
 ```
