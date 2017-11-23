@@ -150,11 +150,26 @@ pid_t login(int *fd)
 					putfd(1, "redirected console\n");
 			}
 		}
-
-		char *argv[]={"/bin/login", "--", 0, 0};
-		(void) execve( argv[0], argv, envp );
-		printf("execve failed\n");
-		exit(1);
+		
+		if ( access("/bin/login",F_OK) != -1){
+			//login exists
+			char *argv[]={"/bin/login", "--", 0, 0};
+			(void) execve( argv[0], argv, envp );
+			printf("execve failed\n");
+			exit(1);
+		}else if (access("/system/bin/sh",F_OK) != -1){
+			//We are in Android Linux
+			char *argv[]={"/system/bin/sh", "--", 0, 0};
+			(void) execve( argv[0], argv, envp );
+			printf("execve failed\n");
+			exit(1);
+		}
+		
+		//char *argv[]={"/system/bin/sh", "--", 0, 0};
+		//char *argv[]={"/bin/login", "--", 0, 0};
+		//(void) execve( argv[0], argv, envp );
+		//printf("execve failed\n");
+		//exit(1);
 	}
 	if(pid == -1) return -1;
 	*fd = amaster;
