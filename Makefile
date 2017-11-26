@@ -5,6 +5,7 @@ LOCAL_DIR := $(LOCAL_DIR:%/=%)
 ifndef TARGET_DIR
 TARGET_DIR := $(LOCAL_DIR)/out
 $(shell mkdir -p $(TARGET_DIR))
+$(shell mkdir -p $(TARGET_DIR)/bin)
 endif
 
 OUTPUT_DIR := $(TARGET_DIR)
@@ -22,13 +23,13 @@ econsole: C_FILES += $(LOCAL_DIR)/skbuff.c
 econsole: C_FILES += $(LOCAL_DIR)/jelopt.c
 
 econsole:
-	$(CC) $(CFLAGS) $(LDFLAGS) $(C_FILES) $(C_INCLUDES) -o $(OUTPUT_DIR)/econsole $(LDLIBS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(C_FILES) $(C_INCLUDES) -o $(OUTPUT_DIR)/bin/econsole $(LDLIBS)
 	
 	
 egetty:	C_FILES := $(LOCAL_DIR)/egetty.c
 egetty: C_FILES += $(LOCAL_DIR)/skbuff.c
 egetty:
-	$(CC) $(CFLAGS) $(LDFLAGS) $(C_FILES) $(C_INCLUDES) -o $(OUTPUT_DIR)/egetty $(LDLIBS)
+	$(CC) $(CFLAGS) $(LDFLAGS) $(C_FILES) $(C_INCLUDES) -o $(OUTPUT_DIR)/bin/egetty $(LDLIBS)
 	
 clean:	
 	rm -f *.o econsole egetty
