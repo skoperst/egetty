@@ -267,6 +267,11 @@ int console_hello(int s, int ifindex, struct sk_buff *skb)
 	return 0;
 }
 
+void dump_buf(char *buf, int len)
+{
+	printf("buf: %s \n",buf);
+}
+
 int main(int argc, char **argv, char **arge)
 {
 	int s;
@@ -417,6 +422,8 @@ int main(int argc, char **argv, char **arge)
 			console_put(s, ifindex, skb);
 		}
 		if(fds[0].revents) {
+			
+			
 			skb_reset(skb);
 			buf = skb_put(skb, 0);
 			n = recvfrom(s, buf, skb_tailroom(skb), 0, (struct sockaddr *)&from, &fromlen);
@@ -487,7 +494,10 @@ int main(int argc, char **argv, char **arge)
 				}
 				skb_trim(skb, len);
 				skb_pull(skb, 4);
-				if(conf.debug) printf("Sent %d bytes to child\n", skb->len);
+				if(conf.debug) {
+					printf("Sent %d bytes to child\n", skb->len);
+					dump_buf(skb->data,skb->len);
+				}
 				write(loginfd, skb->data, skb->len);
 				continue;
 			}
