@@ -21,8 +21,8 @@
 #include <netpacket/packet.h>
 #include <net/ethernet.h> /* the L2 protocols */
 #include <net/if_arp.h>
-
 #include <stdio.h>
+#include <sys/stat.h>
 #include <ctype.h>
 
 #include <string.h>
@@ -149,7 +149,7 @@ pid_t login(int *fd)
 	if(pid == 0) {
 		/* child */
 		if(conf.kmsg) {
-			if ((rc=ioctl(0, TIOCCONS, 0))) {
+			if ((rc = ioctl(0, TIOCCONS, 0))) {
 				if(conf.debug) {
 					putfd(1, "TIOCCONS: ");
 					putfd(1, strerror(errno));
@@ -213,7 +213,7 @@ int console_ucast(int s, int ifindex, struct sk_buff *skb)
 	return sendto(s, skb->data, skb->len, 0, (const struct sockaddr *)&dest, destlen);
 }
 
-int console_bcast(int s, int ifindex, struct sk_buff *skb)
+int send_bcast(int s, int ifindex, struct sk_buff *skb)
 {
 	struct sockaddr_ll dest;
 	socklen_t destlen = sizeof(dest);
@@ -259,7 +259,7 @@ int console_hello(int s, int ifindex, struct sk_buff *skb)
 	*p++ = skb->len >> 8;
 	*p = skb->len & 0xff;
 
-	rc = console_bcast(s, ifindex, skb);
+	rc = send_bcast(s, ifindex, skb);
 	if(rc == -1) {
 		printf("sendto failed: %s\n", strerror(errno));
 		return -1;
@@ -272,8 +272,47 @@ void dump_buf(char *buf, int len)
 	printf("buf: %s \n",buf);
 }
 
+
+int is_ends_with_char(const char *str,int len,char suffix)
+{
+	if (str[len-1] == suffix){
+		return 1;
+	}
+	
+	return 0;
+}
+
+int is_regular_file(const char *path)
+{
+	int ret = 0;
+    struct stat path_stat;
+    stat(path, &path_stat);
+    ret = S_ISREG(path_stat.st_mode);
+    
+    
+    return ret;
+}
+
+int is_path_existing_dir(const char* path)
+{
+   // const char* folderr;
+    //folderr = "C:\\Users\\SaMaN\\Desktop\\Ppln";
+   // folderr = "/tmp";
+    struct stat sb;
+
+    if (stat(path, &sb) == 0 && S_ISDIR(sb.st_mode))
+    {
+        printf("DIR EXISTS YES\n");
+        return 1;
+    }
+    printf("DIR DOES NOT EXIST \n");
+    return 0;
+
+}
+
 int main(int argc, char **argv, char **arge)
 {
+	int ret;
 	int s;
 	struct sockaddr_ll from;
 	socklen_t fromlen = sizeof(from);
@@ -286,6 +325,11 @@ int main(int argc, char **argv, char **arge)
 	int loginfd = -1;
 	pid_t pid=-1;
 	struct sk_buff *skb;
+	int k = 0;
+	FILE *fd;
+	char fd_buf[1024];
+	char pushed_file_path[256];
+	uint64_t pushed_file_total_size = 0;
 	
 	envp = arge;
 	conf.debug = 0;
@@ -403,7 +447,7 @@ int main(int argc, char **argv, char **arge)
 			printf("timeout\n");
 			exit(1);
 		}
-
+	
 		if(fds[1].revents & POLLIN) {
 			if(conf.debug) printf("POLLIN child\n");
 			skb_reset(skb);
@@ -450,6 +494,122 @@ int main(int argc, char **argv, char **arge)
 					skb_reserve(skb, 4);
 					console_hello(s, ifindex, skb);
 					continue;
+				}
+				
+				if (*p == EGETTY_PUSH_START){
+					p++;
+					printf("Got EGETTY_PUSH_START push start \n");
+					int len1 = *p++;
+					int len2 = *p++;
+					pushed_file_total_size = 0;
+					
+					pushed_file_total_size = pushed_file_total_size | ( (*p++) << 56);
+					pushed_file_total_size = pushed_file_total_size | ( (*p++) << 48);
+					pushed_file_total_size = pushed_file_total_size | ( (*p++) << 40);
+					pushed_file_total_size = pushed_file_total_size | ( (*p++) << 32);
+					pushed_file_total_size = pushed_file_total_size | ( (*p++) << 24);
+					pushed_file_total_size = pushed_file_total_size | ( (*p++) << 16);
+					pushed_file_total_size = pushed_file_total_size | ( (*p++) << 8);
+					pushed_file_total_size = pushed_file_total_size |   (*p++);
+					
+					
+					
+					char sha1[20];
+					for (k = 0; k<20; k++){
+						sha1[k] = (*p++);
+					}
+					
+					char filename[128];
+					memset(filename,0,128 * sizeof(char));
+					for (k = 0; k < len1; k++){
+						filename[k] = (*p++);
+					}
+					
+					char dest_path[128];
+					memset(dest_path,0,128 *sizeof(char));
+					for (k = 0; k < len2; k++){
+						dest_path[k] = (*p++);
+					}
+					
+					printf("len1: %d, len2: %d total_size: %lld filename: %s info: [%s]\n",len1,len2,pushed_file_total_size,filename,dest_path);
+					
+					memset(pushed_file_path,0,256 * sizeof(char));
+					if (is_path_existing_dir(dest_path)){
+						//Here we will create/override the file: dest_path/filename
+						
+						memcpy(pushed_file_path,dest_path,len2);
+						
+						if (!is_ends_with_char(dest_path,len2,'/')){
+							pushed_file_path[len2] = '/';
+							memcpy(pushed_file_path + len2 + 1,filename,len1);
+						}else{
+							memcpy(pushed_file_path + len2,filename,len1);
+						}
+						
+						printf("Will write new file into: %s \n",pushed_file_path);
+						
+						
+					}else if (is_regular_file(dest_path)){
+						//Here we just write into dest_path without using filename at all
+						memcpy(pushed_file_path,dest_path,len2);
+						printf("RegFile Will write new file into: %s \n",pushed_file_path);
+					}
+					
+					//else{
+					//	printf("Error no path or file in: %s \n",dest_path);
+					//	continue;
+					//}
+					
+					fd = fopen(pushed_file_path,"wb+");
+					if (fd == NULL){
+						printf("Could not open file! \n");
+						continue;
+					}
+					
+					
+					
+					
+					//TODO: Check path if it exists. If its a directory, or file
+					
+				//	fd = fopen(
+					continue;
+				}
+				if (*p == EGETTY_PUSH_PART){
+					p++;
+					printf("Got EGETTY_PUSH_PART \n");
+					uint64_t file_offset = 0;
+					uint32_t payload_size = 0;
+					
+					file_offset = file_offset | ( (*p++) << 56);
+					file_offset = file_offset | ( (*p++) << 48);
+					file_offset = file_offset | ( (*p++) << 40);
+					file_offset = file_offset | ( (*p++) << 32);
+					file_offset = file_offset | ( (*p++) << 24);
+					file_offset = file_offset | ( (*p++) << 16);
+					file_offset = file_offset | ( (*p++) << 8);
+					file_offset = file_offset |   (*p++);
+					
+					payload_size = payload_size | ( (*p++) << 24);
+					payload_size = payload_size | ( (*p++) << 16);
+					payload_size = payload_size | ( (*p++) << 8);
+					payload_size = payload_size |   (*p++);
+					
+					printf("File offset: %lld, payload size: %d \n",file_offset,payload_size);
+					
+					for (k = 0; k < payload_size; k++){
+						fd_buf[k] = (*p++);
+					}
+					ret = fwrite(fd_buf,payload_size,1,fd);
+					printf("write result: %d \n",ret);
+					
+					if (payload_size + file_offset == pushed_file_total_size){
+						printf("File written! \n");
+						fclose(fd);
+					}
+					
+					
+					continue;
+					
 				}
 				
 				if(*p == EGETTY_WINCH) {
