@@ -643,7 +643,7 @@ static int do_push_func(int s, int ifindex, struct sk_buff *skb,char *filename,c
 	}
 	
 	printf("sleeping after seding ucast \n");
-	sleep(3);
+	sleep(2);
 	
 	printf("Starting sending file loop \n");
 	clock_gettime(CLOCK_MONOTONIC_RAW,&start_ts);
@@ -693,12 +693,7 @@ static int do_push_func(int s, int ifindex, struct sk_buff *skb,char *filename,c
 			fprintf(stderr, "sendto failed: %s\n", strerror(errno));
 			return -1;
 		}
-		usleep(50000);
-		usleep(50000);
-		usleep(50000);
-		usleep(50000);
-		usleep(50000);
-		usleep(50000);
+		usleep(500);
 	}
 	fclose(fp);
 	printf("Done pushing file! \n");
@@ -762,9 +757,10 @@ static int do_push_func(int s, int ifindex, struct sk_buff *skb,char *filename,c
 
 void usage_exit()
 {
-	printf("econsole [(-i <iface> (-m <mac))] ping - ping to remote console \n");
-	printf("econsole [(-i <iface> (-m <mac))] shell - get remote shell \n");
+	printf("econsole [(-i <iface> (-m <mac>))] ping - ping to remote console \n");
+	printf("econsole [(-i <iface> (-m <mac>))] shell - get remote shell \n");
 	printf("econsole [(-i <iface>)] devices - get devices available in the interface \n");
+	printf("econsole [(-i <iface> (-m <mac>))] push <file> <remote path> - get devices available in the interface \n");
 	exit(0);
 }
 
@@ -795,20 +791,6 @@ int main(int argc, char **argv)
 	do_devices = 0;
 	do_shell = 0;
 	
-	/*if(jelopt(argv, 'h', "help", NULL, &err)) {
-		printf("econsole [DEV] [DESTMAC] [(scan|debug)]\n"); 
-		printf("econsole [DEV] [DESTMAC] [(devices)] - list available consoles\n");
-		printf("econsole [DEV] [DESTMAC] [(shell)] - get shell\n");
-		printf("econsole [DEV] [DESTMAC] [(push <src-file> <dest-path>)] - push a file to remote\n");
-		printf("econsole [(-i <iface>)|(-m <mac)] ping - ping to remote console \n");
-		printf("ex. 'sudo econsole eth0 shell' \n");
-		exit(0);
-	}*/
-	//argc = jelopt_final(argv, &err);
-	//if(err) {
-	//	printf("Syntax error in arguments.\n");
-	//	exit(2);
-	//}
 	argc--;
 	argv++;
 	

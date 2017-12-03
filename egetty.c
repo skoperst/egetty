@@ -331,6 +331,7 @@ int main(int argc, char **argv, char **arge)
 	char pushed_file_path[256];
 	uint64_t pushed_file_total_size = 0;
 	
+	char streambuf[65536];
 	envp = arge;
 	conf.debug = 0;
 	conf.device = "eth0";
@@ -565,7 +566,11 @@ int main(int argc, char **argv, char **arge)
 						printf("Could not open file! \n");
 						continue;
 					}
-					
+					//if (setvbuf(fd,streambuf,_IOFBF,65536) != 0){
+					//	printf("setvbuf() error \n");
+						//continue;
+					//}
+
 					
 					
 					
@@ -601,6 +606,13 @@ int main(int argc, char **argv, char **arge)
 					}
 					ret = fwrite(fd_buf,payload_size,1,fd);
 					printf("write result: %d \n",ret);
+					fflush(fd);
+					
+					if (ret == 0){
+						printf("Exiting, as fwrite failed! \n");
+						exit(0);
+					//	ferror(ret);
+					}
 					
 					if (payload_size + file_offset == pushed_file_total_size){
 						printf("File written! \n");
