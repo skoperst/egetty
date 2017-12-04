@@ -59,7 +59,7 @@ econsole [(-i <iface> (-m <mac>))] push <file> <remote path>
 
 :exclamation: :exclamation: :exclamation: :exclamation: :exclamation: :exclamation:
  ## Pushing files on an ethernet cable may result in errors! as there is no guarantee of transfer and processing order.
- One could use a data link cable that is implemented by 2-way interface which are based on the plusb driver.
+ To overcome this one could use a data link cable that is implemented by 2-way interface which are based on the plusb driver.
  Some devices are:
  **Unitek Y-3501 based on PL-27A1**
  **Goobay Active USB 3.0**
