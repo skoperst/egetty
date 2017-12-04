@@ -57,11 +57,16 @@ Pushing a file from local machine over the egetty connection:
 econsole [(-i <iface> (-m <mac>))] push <file> <remote path>
 ```
 
-
-You may have to modify /etc/securetty
-Look at what 'login' logs.
-Add for example 'pts/1'.
-
+:exclamation: :exclamation: :exclamation: :exclamation: :exclamation: :exclamation:
+ ## Pushing files on an ethernet cable may result in errors! as there is no guarantee of transfer and processing order.
+ One could use a data link cable that is implemented by 2-way interface which are based on the plusb driver.
+ Some devices are:
+ **Unitek Y-3501 based on PL-27A1**
+ **Goobay Active USB 3.0**
+ **NI Host-To-Host cable**
+ **Belkin F5U258/F5U279**
+ **PL-25A1**
+:exclamation: :exclamation: :exclamation: :exclamation: :exclamation: :exclamation:
 
 ## 2. Android
 
