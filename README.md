@@ -61,11 +61,17 @@ econsole [(-i <iface> (-m <mac>))] push <file> <remote path>
  ## Pushing files on an ethernet cable may result in errors! as there is no guarantee of transfer and processing order.
  To overcome this one could use a data link cable that is implemented by 2-way interface which are based on the plusb driver.
  Some devices are:
+
  **Unitek Y-3501 based on PL-27A1**
+ 
  **Goobay Active USB 3.0**
+
  **NI Host-To-Host cable**
+
  **Belkin F5U258/F5U279**
+
  **PL-25A1**
+
 :exclamation: :exclamation: :exclamation: :exclamation: :exclamation: :exclamation:
 
 ## 2. Android
