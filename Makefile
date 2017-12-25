@@ -33,3 +33,7 @@ egetty:
 	
 clean:	
 	rm -f *.o econsole egetty
+
+.PHONY: install
+install:
+	install -m 0755 $(OUTPUT_DIR)/bin/econsole /usr/local/bin/
