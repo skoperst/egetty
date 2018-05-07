@@ -267,6 +267,36 @@ int console_hello(int s, int ifindex, struct sk_buff *skb)
 	return 0;
 }
 
+static long get_filesize(const char* file, uint64_t* file_size)
+{
+	FILE* fp = fopen(file, "r");
+	if (fp == NULL){
+		return -1;
+	}
+	fseek(fp, 0 , SEEK_END);
+	long fileSize = ftell(fp);
+	fclose(fp);
+	
+	*file_size = fileSize;
+	return fileSize;
+}
+
+int send_to_econsole(int s, int ifindex, struct sk_buff *skb)
+{
+	struct sockaddr_ll dest;
+	socklen_t destlen = sizeof(dest);
+
+	memset(&dest, 0, sizeof(dest));
+
+	dest.sll_family = AF_PACKET;
+	dest.sll_halen = 6;
+	dest.sll_protocol = htons(ETH_P_EGETTY);
+	dest.sll_ifindex = ifindex;
+	memcpy(dest.sll_addr, conf.client.sll_addr, 6);
+	
+	return sendto(s, skb->data, skb->len, 0, (const struct sockaddr *)&dest, destlen);
+}
+
 void dump_buf(char *buf, int len)
 {
 	printf("buf: %s \n",buf);
@@ -319,6 +349,7 @@ int main(int argc, char **argv, char **arge)
 	int ifindex=-1;
 	uint8_t *buf, *p;
 	ssize_t n;
+	uint32_t i;
 	unsigned int len;
 	//int count=1;
 	int timeout = -1;
@@ -327,11 +358,13 @@ int main(int argc, char **argv, char **arge)
 	struct sk_buff *skb;
 	int k = 0;
 	FILE *fd;
+	FILE *pull_fd;
 	char fd_buf[1024];
 	char pushed_file_path[256];
 	uint64_t pushed_file_total_size = 0;
 	
 	char streambuf[65536];
+	char pull_buf[4096];
 	envp = arge;
 	conf.debug = 0;
 	conf.device = "eth0";
@@ -481,6 +514,7 @@ int main(int argc, char **argv, char **arge)
 			if(conf.debug) printf("received packet %d bytes\n", skb->len);
 			
 			if(ntohs(from.sll_protocol) == ETH_P_EGETTY) {
+				
 				if(conf.debug)
 					printf("Received EGETTY\n");
 				
@@ -488,16 +522,12 @@ int main(int argc, char **argv, char **arge)
 				if(*p == EGETTY_HUP) {
 					if(pid != -1) kill(pid, 9);
 					continue;
-				}
-				
-				if(*p == EGETTY_SCAN) {
+				}else if(*p == EGETTY_SCAN) {
 					skb_reset(skb);
 					skb_reserve(skb, 4);
 					console_hello(s, ifindex, skb);
 					continue;
-				}
-				
-				if (*p == EGETTY_PUSH_START){
+				}else if (*p == EGETTY_PUSH_START){
 					p++;
 					printf("Got EGETTY_PUSH_START push start \n");
 					int len1 = *p++;
@@ -578,8 +608,7 @@ int main(int argc, char **argv, char **arge)
 					
 				//	fd = fopen(
 					continue;
-				}
-				if (*p == EGETTY_PUSH_PART){
+				}else if (*p == EGETTY_PUSH_PART){
 					p++;
 					printf("Got EGETTY_PUSH_PART \n");
 					uint64_t file_offset = 0;
@@ -622,9 +651,85 @@ int main(int argc, char **argv, char **arge)
 					
 					continue;
 					
-				}
-				
-				if(*p == EGETTY_WINCH) {
+				}else if (*p == EGETTY_PULL_START_REQUEST){
+					p++;
+					//printf("Got EGETTY_PULL_PART_REQUEST \n");
+					uint32_t len;
+					uint64_t file_size = 0;
+					char* file_path;
+					
+					len = len | ( (*p++) << 24);
+					len = len | ( (*p++) << 16);
+					len = len | ( (*p++) << 8);
+					len = len |   (*p++);
+					
+					for (i=0; i<len; i++){
+						streambuf[i] = (*p++);
+					}
+					streambuf[i] = NULL;
+					file_path = streambuf;
+					if (get_filesize(file_path, &file_size) < 0){
+						//printf("could not get file size, file not accessible\n");
+						skb_reset(skb);
+						p = skb_put(skb, 1);
+						*p++ = EGETTY_ERROR;
+					}else{
+						pull_fd = fopen(file_path, "r");
+						skb_reset(skb);
+						p = skb_put(skb, 1);
+						*p++ = EGETTY_PULL_START_RESPONSE;
+					
+						p = skb_put(skb, 8);
+						*p++ = (file_size >> 56) & 0xFF;
+						*p++ = (file_size >> 48) & 0xFF;
+						*p++ = (file_size >> 40) & 0xFF;
+						*p++ = (file_size >> 32) & 0xFF;
+						*p++ = (file_size >> 24) & 0xFF;
+						*p++ = (file_size >> 16) & 0xFF;
+						*p++ = (file_size >> 8) & 0xFF;
+						*p++ = (file_size & 0xFF);
+					}
+					
+					send_to_econsole(s, ifindex, skb);
+					continue;
+				}else if (*p == EGETTY_PULL_PART_REQUEST){
+					p++;
+					uint64_t file_offset;
+					uint32_t payload_size;
+					
+					file_offset = file_offset | ( (*p++) << 56);
+					file_offset = file_offset | ( (*p++) << 48);
+					file_offset = file_offset | ( (*p++) << 40);
+					file_offset = file_offset | ( (*p++) << 32);
+					file_offset = file_offset | ( (*p++) << 24);
+					file_offset = file_offset | ( (*p++) << 16);
+					file_offset = file_offset | ( (*p++) << 8);
+					file_offset = file_offset |   (*p++);
+					
+					payload_size = payload_size | ( (*p++) << 24);
+					payload_size = payload_size | ( (*p++) << 16);
+					payload_size = payload_size | ( (*p++) << 8);
+					payload_size = payload_size |   (*p++);
+					
+					fseek(pull_fd, file_offset, SEEK_SET);
+					//printf("reading %d bytes \n", payload_size);
+					fread(pull_buf, payload_size, 1, pull_fd);
+					
+					skb_reset(skb);
+					p = skb_put(skb, 1);
+					*p++ = EGETTY_PULL_PART_RESPONSE;
+					
+					p = skb_put(skb, 4);
+					*p++ = (payload_size >> 24) & 0xFF;
+					*p++ = (payload_size >> 16) & 0xFF;
+					*p++ = (payload_size >> 8) & 0xFF;
+					*p++ = (payload_size & 0xFF);
+					
+					p = skb_put(skb, payload_size);
+					memcpy(p, pull_buf, payload_size);
+					send_to_econsole(s, ifindex, skb);
+					continue;
+				}else if(*p == EGETTY_WINCH) {
 					p++;
 					if(*p != conf.console) {
 						if(conf.debug)
@@ -645,11 +750,11 @@ int main(int argc, char **argv, char **arge)
 					continue;
 				}
 				
-				if(*p != EGETTY_IN) {
+				else if(*p != EGETTY_IN) {
 					if(conf.debug)
 						printf("Not EGETTY_IN: %d\n", *p);
 					continue;
-				}
+				}else{
 				p++;
 				if(*p != conf.console) {
 					if(conf.debug)
@@ -672,6 +777,7 @@ int main(int argc, char **argv, char **arge)
 				}
 				write(loginfd, skb->data, skb->len);
 				continue;
+			}
 			}
 		}
 		

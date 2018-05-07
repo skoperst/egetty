@@ -324,7 +324,7 @@ static int seconds_elapsed_from(struct timespec *ts)
 	
 }
 
-static int console_devices(int s, int ifindex, struct sk_buff *skb,struct sockaddr_ll *res)
+static int console_devices(int s, int ifindex, struct sk_buff *skb, struct sockaddr_ll *res)
 {
 	int rc;
 	uint8_t *buf, *p;
@@ -536,7 +536,17 @@ static const char* get_basename(const char* filename)
     }
 }
 
-static long get_filesize(const char* file)
+static int is_file_accessible(const char* file)
+{
+	FILE* fp = fopen(file, "r");
+	if (fp == NULL){
+		return 0;
+	}
+	
+	
+}
+
+static long get_filesize(const char* file, uint64_t* file_size)
 {
 	FILE* fp = fopen(file, "r");
 	if (fp == NULL){
@@ -546,6 +556,7 @@ static long get_filesize(const char* file)
 	long fileSize = ftell(fp);
 	fclose(fp);
 	
+	*file_size = fileSize;
 	return fileSize;
 }
 
@@ -566,13 +577,14 @@ static int do_push_func(int s, int ifindex, struct sk_buff *skb,char *filename,c
 	uint8_t file_len;
 	uint8_t dest_path_len;
 	uint64_t total_file_size;
+	uint64_t tmp;
 	
 	FILE *fp;
 	char fb_buf[1024];
 	char *file_basename;
 	
 	//First we want to check our file 
-	total_file_size = get_filesize(filename);
+	total_file_size = get_filesize(filename, &tmp);
 	if (total_file_size < 0){
 		printf("Could not stat file: %s \n",filename);
 		return -1;
@@ -583,7 +595,7 @@ static int do_push_func(int s, int ifindex, struct sk_buff *skb,char *filename,c
 		printf("Could not open file: %s for reading \n",filename);
 		return -1;
 	}
-	printf("kkx \n");
+	
 	file_basename = get_basename(filename);
 	printf("basename: %s \n", file_basename);
 	
@@ -643,7 +655,7 @@ static int do_push_func(int s, int ifindex, struct sk_buff *skb,char *filename,c
 	}
 	
 	printf("sleeping after seding ucast \n");
-	sleep(2);
+	sleep(1);
 	
 	printf("Starting sending file loop \n");
 	clock_gettime(CLOCK_MONOTONIC_RAW,&start_ts);
@@ -652,7 +664,6 @@ static int do_push_func(int s, int ifindex, struct sk_buff *skb,char *filename,c
 	uint32_t payload_size = 0;
 	
 	while(file_offset < total_file_size){
-		printf("inside loop \n");
 		skb_reset(skb);
 		p = skb_put(skb, 1);
 		//p = skb_put(skb,40);
@@ -696,71 +707,267 @@ static int do_push_func(int s, int ifindex, struct sk_buff *skb,char *filename,c
 		usleep(500);
 	}
 	fclose(fp);
-	printf("Done pushing file! \n");
-	/*
-	struct pollfd fds[1];
-	fds[0].fd = conf.s;
-	fds[0].events = POLLIN;
-	fds[0].revents = 0;
-	
-	
-	
-	while(1){
-		if (conf.debug)
-			printf("polling... \n");
-		n = poll(fds,1,3000);
-		if (conf.debug)
-			printf("Got polled by: %d \n",n);
-		if (seconds_elapsed_from(&start_ts) > 3){//Time Elapsed
-			break;
-		}
-		
-		if (n == 1){
-			skb_reset(skb);
-			buf = skb_put(skb, 0);
-			rec_n = recvfrom(conf.s, buf, skb_tailroom(skb), 0, (struct sockaddr *)&from, &fromlen);
-			if(rec_n == -1) {
-				fprintf(stderr, "recvfrom() failed. ifconfig up?\n");
-				continue;
-			}
-			skb_put(skb, rec_n);
-
-			if(conf.ucast)
-				if(memcmp(conf.dest.sll_addr, from.sll_addr, 6))
-					continue;
-		
-			if(ntohs(from.sll_protocol) == ETH_P_EGETTY) {
-				if(conf.debug) printf("Received EGETTY\n");
-				p = skb->data;
-				if(*p == EGETTY_HELLO) {
-						p++;
-						printf("Console: %d ", *p);
-						for(i=0;i<6;i++)
-							printf("%02x%s", from.sll_addr[i], i==5?"":":");
-						printf("\n");
-					continue;
-				}
-			}
-			
-		}else if (n == 0){//Timeout
-			break;
-		}
-		
-		
-	}*/
-	console_hup(conf.s, conf.ifindex);
+//	console_hup(conf.s, conf.ifindex);
 	//tcsetattr(0, TCSANOW, &conf.term);
-	
-	//printf("Exiting devices \n");
 	return 0;
 }
 
+static int do_pull_func(int s, int ifindex, struct sk_buff *skb,char *file_path, char *dest_path)
+{
+	int rc;
+	uint8_t *buf, *p;
+	int n;
+	struct timespec start_ts;
+	struct sockaddr_ll from;
+	socklen_t fromlen = sizeof(from);
+	int i;
+	unsigned int len;
+	int rec_n;
+	int ret = 0;
+	int k =0;
+	uint8_t file_len;
+	uint8_t dest_path_len;
+	uint64_t total_file_size;
+	
+	FILE *fp;
+	
+	char *file_basename;
+	struct sockaddr_ll *res;
+	if (res == NULL){
+		res = &from;
+	}
+	uint8_t  payload[1024];
+	uint32_t payload_size = 1024;
+	
+	uint64_t remaining_bytes = 0;
+	uint64_t file_offset = 0;
+	char base_name_path[1024];
+	//First we want to check our file 
+	//total_file_size = get_filesize(filename);
+	//if (total_file_size < 0){
+	//	printf("Could not stat file: %s \n",filename);
+	//	return -1;
+	//}
+	
+	//fp = fopen(filename, "r");
+	//if (fp == NULL){
+	//	printf("Could not open file: %s for reading \n",filename);
+	//	return -1;
+	//}
+	
+	//file_basename = get_basename(filename);
+	//printf("basename: %s \n", file_basename);
+	
+
+	//Second we want to check if our device exists:
+	ret = console_devices(s,ifindex,skb,&from);
+	if (ret != 0){
+		printf("Could not find device on specified interface\n");
+		return -1;
+	}
+	
+	printf("Device found \n");
+	printf("Sending EGETTY_PULL_START_REQUEST \n");
+	
+	len = strlen(file_path);
+	
+	skb_reset(skb);
+	p = skb_put(skb, 1);
+	*p++ = EGETTY_PULL_START_REQUEST;
+	
+	p = skb_put(skb, 4);
+	*p++ = (len >> 24) & 0xFF;
+	*p++ = (len >> 16) & 0xFF;
+	*p++ = (len >> 8) & 0xFF;
+	*p++ = (len & 0xFF);
+	
+	p = skb_put(skb, len);
+	strncpy(p, file_path, len);
+	
+	ret = send_ucast(s, ifindex,&from, skb);
+	if(ret == -1) {
+		fprintf(stderr, "sendto failed: %s\n", strerror(errno));
+		return -1;
+	}
+	printf("sleeping after seding ucast \n");
+	sleep(1);
+	
+	//Now get response for file details
+	skb_reset(skb);
+	buf = skb_put(skb, 0);
+	rec_n = recvfrom(conf.s, buf, skb_tailroom(skb), 0, (struct sockaddr *)res, &fromlen);
+	if(rec_n == -1) {
+		fprintf(stderr, "recvfrom() failed. ifconfig up?\n");
+	}
+	p = skb->data;
+	if (*p == EGETTY_ERROR){
+		printf("error getting file \n");
+		return -1;
+	}
+	
+	p++;//msg id
+	uint64_t file_size;
+	file_size = file_size | ( (*p++) << 56);
+	file_size = file_size | ( (*p++) << 48);
+	file_size = file_size | ( (*p++) << 40);
+	file_size = file_size | ( (*p++) << 32);
+	file_size = file_size | ( (*p++) << 24);
+	file_size = file_size | ( (*p++) << 16);
+	file_size = file_size | ( (*p++) << 8);
+	file_size = file_size |   (*p++);
+	
+	printf("file size: %llu \n", file_size);
+	remaining_bytes = file_size;
+	file_offset = 0;
+	char* base = get_basename(file_path);
+	sprintf(base_name_path, "%s/%s", dest_path, base);
+	printf("Opening file: %s for writing \n", base_name_path);
+	//sleep(5);//we have no flow control. this should be enough
+	fp = fopen(base_name_path, "wb");
+	while(remaining_bytes > 0){
+		if (remaining_bytes < payload_size){
+			payload_size = remaining_bytes;
+		}
+		
+		skb_reset(skb);
+		p = skb_put(skb, 1);
+		*p++ = EGETTY_PULL_PART_REQUEST;
+		p = skb_put(skb, 8);
+		*p++ = (file_offset >> 56) & 0xFF;
+		*p++ = (file_offset >> 48) & 0xFF;
+		*p++ = (file_offset >> 40) & 0xFF;
+		*p++ = (file_offset >> 32) & 0xFF;
+		*p++ = (file_offset >> 24) & 0xFF;
+		*p++ = (file_offset >> 16) & 0xFF;
+		*p++ = (file_offset >> 8) & 0xFF;
+		*p++ = (file_offset & 0xFF);
+		
+		p = skb_put(skb, 4);
+		*p++ = (payload_size >> 24) & 0xFF;
+		*p++ = (payload_size >> 16) & 0xFF;
+		*p++ = (payload_size >> 8) & 0xFF;
+		*p++ = (payload_size & 0xFF);
+		
+		ret = send_ucast(s, ifindex,&from, skb);
+		
+		
+		
+	//	sleep(3);//we have no flow control. this should be enough
+		printf("send pull part request \n");
+		skb_reset(skb);
+		buf = skb_put(skb, 0);
+		rec_n = recvfrom(conf.s, buf, skb_tailroom(skb), 0, (struct sockaddr *)res, &fromlen);
+		if(rec_n == -1) {
+			fprintf(stderr, "recvfrom() failed. ifconfig up?\n");
+		}
+		p = skb->data;
+		if (*p == EGETTY_ERROR){
+			printf("error getting file \n");
+			return -1;
+		}
+		
+		if (*p == EGETTY_PULL_PART_RESPONSE){
+			p++;
+			printf("Got a part response! \n");
+			payload_size = 0;
+			payload_size = payload_size | ( (*p++) << 24);
+			payload_size = payload_size | ( (*p++) << 16);
+			payload_size = payload_size | ( (*p++) << 8);
+			payload_size = payload_size |   (*p++);
+			
+			for (i = 0; i < payload_size; i++){
+				payload[i] = (*p++);
+			}
+			
+			printf("writing %d bytes to file \n", payload_size);
+			fwrite(payload, payload_size, 1, fp);
+			file_offset += payload_size;
+			remaining_bytes -= payload_size;
+		}else{
+			printf("got some BS! \n");
+			//printf("XXX %d XXX %d  %d\n", *p, *(p++), *(p+=2));
+		}
+		
+		printf("remaining: %d \n", remaining_bytes);
+		//sleep(5);//we have no flow control. this should be enough
+		//wait for data
+		//fwrite(payload, payload_size * sizeof(uint8_t), 1, fp);
+	}
+	fclose(fp);
+	
+	printf("done \n");
+	
+	
+
+
+	//console_hup(conf.s, conf.ifindex);	
+	
+/*
+	
+	printf("sleeping after seding ucast \n");
+	sleep(1);
+	
+	printf("Starting sending file loop \n");
+	clock_gettime(CLOCK_MONOTONIC_RAW,&start_ts);
+	
+	uint64_t file_offset = 0;
+	uint32_t payload_size = 0;
+	
+	while(file_offset < total_file_size){
+		skb_reset(skb);
+		p = skb_put(skb, 1);
+		//p = skb_put(skb,40);
+		*p++ = EGETTY_PUSH_PART;
+		p = skb_put(skb, 8);
+		*p++ = (file_offset >> 56) & 0xFF;
+		*p++ = (file_offset >> 48) & 0xFF;
+		*p++ = (file_offset >> 40) & 0xFF;
+		*p++ = (file_offset >> 32) & 0xFF;
+		*p++ = (file_offset >> 24) & 0xFF;
+		*p++ = (file_offset >> 16) & 0xFF;
+		*p++ = (file_offset >> 8) & 0xFF;
+		*p++ = (file_offset & 0xFF);
+		
+		payload_size = 1024;
+		if (file_offset + payload_size > total_file_size){
+			payload_size = total_file_size - file_offset;
+		}
+		p = skb_put(skb, 4);
+		*p++ = (payload_size >> 24) & 0xFF;
+		*p++ = (payload_size >> 16) & 0xFF;
+		*p++ = (payload_size >> 8) & 0xFF;
+		*p++ = (payload_size & 0xFF);
+		
+		file_offset = file_offset + payload_size;
+		
+		//The file bytes(payload)
+		if (fread(fb_buf, payload_size, 1, fp) != 1){
+			printf("Error reading from file! \n");
+			return -1;
+		}
+
+		p = skb_put(skb,payload_size);
+		memcpy(p,fb_buf,payload_size);
+		
+		ret = send_ucast(s, ifindex,&from, skb);
+		if(ret == -1) {
+			fprintf(stderr, "sendto failed: %s\n", strerror(errno));
+			return -1;
+		}
+		usleep(500);
+	}
+	fclose(fp);
+	console_hup(conf.s, conf.ifindex);
+	//tcsetattr(0, TCSANOW, &conf.term);*/
+	return 0;
+}
 void usage_exit()
 {
 	printf("econsole [(-i <iface> (-m <mac>))] ping - ping to remote console \n");
 	printf("econsole [(-i <iface> (-m <mac>))] shell - get remote shell \n");
 	printf("econsole [(-i <iface>)] devices - get devices available in the interface \n");
-	printf("econsole [(-i <iface> (-m <mac>))] push <file> <remote path> - get devices available in the interface \n");
+	printf("econsole [(-i <iface> (-m <mac>))] push <file> <remote path> - push a file into remote device \n");
+	printf("econsole [(-i <iface> (-m <mac>))] pull <file> (<local path>) \n");
 	exit(0);
 }
 
@@ -780,9 +987,10 @@ int main(int argc, char **argv)
 	
 	char iface[128];
 	char mac[128];
-	char push_file[1024],push_dest_path[1024];
+	char push_file[1024], push_dest_path[1024];
+	char pull_file[1024], pull_dest_path[1024];
 	int use_mac,use_iface;
-	int do_ping,do_push,do_devices,do_shell;
+	int do_ping, do_push, do_devices, do_shell, do_pull;
 	
 	use_mac = 0;
 	use_iface = 0;
@@ -790,13 +998,13 @@ int main(int argc, char **argv)
 	do_push = 0;
 	do_devices = 0;
 	do_shell = 0;
+	do_pull = 0;
 	
 	argc--;
 	argv++;
 	
 
 	while(argc > 0){
-		printf("argv: %s \n",argv[0]);
 		if (strcmp(argv[0],"-i") == 0){
 			
 			argc--;
@@ -842,9 +1050,26 @@ int main(int argc, char **argv)
 			argv++;
 			printf("push cmd \n");
 			
-		}
-		
-		else{
+		}else if (strcmp(argv[0], "pull") == 0){
+			argc--;
+			argv++;
+			if (argc < 1){
+				usage_exit();
+			}
+			do_pull = 1;
+			strncpy(pull_file, argv[0], 1024);
+			argc--;
+			argv++;
+			getcwd(pull_dest_path, 1024);
+			if (argc > 1){
+				strncpy(pull_dest_path, argv[0], 1024);
+				argc--;
+				argv++;
+				
+			}
+			printf("argc: %d \n", argc);
+			
+		}else{
 			usage_exit();
 		}	
 	}
@@ -853,7 +1078,7 @@ int main(int argc, char **argv)
 		printf("Must supply interface \n");
 		usage_exit();
 	}
-	if ((do_devices + do_ping + do_shell + do_push) != 1){
+	if ((do_devices + do_ping + do_shell + do_push + do_pull) != 1){
 		printf("Must select only 1 command \n");
 		usage_exit();
 	}
@@ -914,126 +1139,14 @@ int main(int argc, char **argv)
 	
 	if (do_push){
 		printf("do push for file: %s 'into' '%s'\n",push_file,push_dest_path);
-		do_push_func(conf.s,conf.ifindex,skb,push_file,push_dest_path);
+		do_push_func(conf.s, conf.ifindex, skb,push_file, push_dest_path);
 	}
 	
-	/*
-	
-
-	while(--argc > 0) {
-		if(strcmp(argv[argc], "scan")==0) {
-			printf("Scanning for econsoles\n");
-			conf.scan = 1;
-			continue;
-		}
-		
-		if(strcmp(argv[argc], "devices")==0) {
-			printf("egetty devices:\n");
-			conf.devices = 1;
-			continue;
-		}
-		
-		if (strcmp(argv[argc],"shell") == 0){
-			conf.shell = 1;
-			continue;
-		}
-		
-		if(strcmp(argv[argc], "debug")==0) {
-			printf("Debug mode\n");
-			conf.debug++;
-			continue;
-		}
-		
-		if (strcmp(argv[argc], "push") == 0){
-			printf("pushing .. \n");
-			conf.push = 1;
-			continue;
-		}
-		
-		if( (strlen(argv[argc]) < 3) && isdigit(*argv[argc])) {
-			conf.console = atoi(argv[argc]);
-			continue;
-		}
-		if(strchr(argv[argc], ':' )) {
-			unsigned int a;
-			ps = argv[argc];
-			for(i=0;i<6;i++) {
-				sscanf(ps, "%x", &a);
-				conf.dest.sll_addr[i] = a;
-				ps = strchr(ps, ':');
-				if(!ps) break;
-				ps++;
-			}
-			conf.ucast = 1;
-			continue;
-		} else {
-			device = argv[argc];
-		}
-	}
-	
-	conf.devsocket = devsocket();
-	
-	while(set_flag(device, (IFF_UP | IFF_RUNNING))) {
-		printf("Waiting for interface [%s] to be available \n",device);
+	if (do_pull){
+		printf("pulling file: %s, to local path: %s/ \n", pull_file, pull_dest_path);
+		do_pull_func(conf.s, conf.ifindex, skb, pull_file, pull_dest_path);
 		sleep(1);
 	}
-	
-	if(device)
-	{
-		conf.ifindex = if_nametoindex(device);
-		if(!conf.ifindex)
-		{
-			fprintf(stderr, "no such device %s\n", device);
-			exit(1);
-		}
-	}
-
-	conf.s = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_EGETTY));
-	if(conf.s == -1)
-	{
-		fprintf(stderr, "socket(): %s\n", strerror(errno));
-		exit(1);
-	}
-
-
-	if(conf.ifindex >= 0)
-	{
-		struct sockaddr_ll addr;
-		memset(&addr, 0, sizeof(addr));
-		
-		addr.sll_family = AF_PACKET;
-		addr.sll_protocol = htons(ETH_P_EGETTY);
-		addr.sll_ifindex = conf.ifindex;
-		
-		if(bind(conf.s, (const struct sockaddr *)&addr, sizeof(addr)))
-		{
-			fprintf(stderr, "bind failed: %s\n", strerror(errno));
-			exit(1);
-		}
-	}
-
-	if(conf.shell == 1) {
-		terminal_settings();
-		signals_init();
-		winch_handler(0);
-		fprintf(stderr, "Use CTRL-] to close connection.\n");
-	}
-
-	skb = alloc_skb(1500);
-
-	if(conf.scan){
-		console_scan(conf.s, conf.ifindex, skb);
-	}else if (conf.devices){
-		console_devices(conf.s,conf.ifindex,skb);
-	}else if (conf.push){
-		//push file
-	}
-	else{
-		console_shell(conf.s,conf.ifindex,skb);
-	}
-	
-	exit(0);
-	* */
 	
 	return 0;
 }
