@@ -74,6 +74,7 @@ econsole [(-i <iface> (-m <mac>))] push <file> <remote path>
 
 :exclamation: :exclamation: :exclamation: :exclamation: :exclamation: :exclamation:
 
+
 ## 2. Android
 
 Its possible to use egetty in android by compiling it into the firmware:
@@ -90,3 +91,4 @@ service egetty /system/bin/egetty eth0
     class main
     user root
 ```
+
