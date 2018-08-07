@@ -1061,13 +1061,12 @@ int main(int argc, char **argv)
 			argc--;
 			argv++;
 			getcwd(pull_dest_path, 1024);
-			if (argc > 1){
+			if (argc >= 1){
 				strncpy(pull_dest_path, argv[0], 1024);
 				argc--;
 				argv++;
 				
 			}
-			printf("argc: %d \n", argc);
 			
 		}else{
 			usage_exit();
