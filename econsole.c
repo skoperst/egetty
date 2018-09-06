@@ -2,7 +2,7 @@
  * File: econsole.c
  * Implements: ethernet console client
  *
- * Copyright: Jens Låås, 2011
+ * Copyright: Jens Lï¿½ï¿½s, 2011
  * Copyright license: According to GPL, see file COPYING in this directory.
  *
  */
@@ -25,6 +25,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <poll.h>
+#include <stdbool.h>
 
 #include <termios.h> /* for tcgetattr */
 #include <sys/ioctl.h> /* for winsize */
@@ -739,7 +740,7 @@ static int do_pull_func(int s, int ifindex, struct sk_buff *skb,char *file_path,
 	uint8_t  payload[1024];
 	uint32_t payload_size = 1024;
 	
-	uint64_t remaining_bytes = 0;
+	int64_t remaining_bytes = 0;
 	uint64_t file_offset = 0;
 	char base_name_path[1024];
 	//First we want to check our file 
@@ -806,7 +807,7 @@ static int do_pull_func(int s, int ifindex, struct sk_buff *skb,char *file_path,
 	}
 	
 	p++;//msg id
-	uint64_t file_size;
+	uint64_t file_size = 0;
 	file_size = file_size | ( (*p++) << 56);
 	file_size = file_size | ( (*p++) << 48);
 	file_size = file_size | ( (*p++) << 40);
@@ -815,7 +816,7 @@ static int do_pull_func(int s, int ifindex, struct sk_buff *skb,char *file_path,
 	file_size = file_size | ( (*p++) << 16);
 	file_size = file_size | ( (*p++) << 8);
 	file_size = file_size |   (*p++);
-	
+
 	printf("file size: %llu \n", file_size);
 	remaining_bytes = file_size;
 	file_offset = 0;
@@ -824,8 +825,9 @@ static int do_pull_func(int s, int ifindex, struct sk_buff *skb,char *file_path,
 	printf("Opening file: %s for writing \n", base_name_path);
 	//sleep(5);//we have no flow control. this should be enough
 	fp = fopen(base_name_path, "wb");
+	bool isFirst = true;
 	while(remaining_bytes > 0){
-		if (remaining_bytes < payload_size){
+		if (remaining_bytes < payload_size) {
 			payload_size = remaining_bytes;
 		}
 		
@@ -847,7 +849,7 @@ static int do_pull_func(int s, int ifindex, struct sk_buff *skb,char *file_path,
 		*p++ = (payload_size >> 16) & 0xFF;
 		*p++ = (payload_size >> 8) & 0xFF;
 		*p++ = (payload_size & 0xFF);
-		
+
 		ret = send_ucast(s, ifindex,&from, skb);
 		
 		
@@ -856,6 +858,13 @@ static int do_pull_func(int s, int ifindex, struct sk_buff *skb,char *file_path,
 		printf("send pull part request \n");
 		skb_reset(skb);
 		buf = skb_put(skb, 0);
+
+		// The first response is junk
+		if (isFirst) {
+			rec_n = recvfrom(conf.s, buf, skb_tailroom(skb), 0, (struct sockaddr *)res, &fromlen);
+			isFirst = false;
+		}
+
 		rec_n = recvfrom(conf.s, buf, skb_tailroom(skb), 0, (struct sockaddr *)res, &fromlen);
 		if(rec_n == -1) {
 			fprintf(stderr, "recvfrom() failed. ifconfig up?\n");
@@ -894,7 +903,7 @@ static int do_pull_func(int s, int ifindex, struct sk_buff *skb,char *file_path,
 		//fwrite(payload, payload_size * sizeof(uint8_t), 1, fp);
 	}
 	fclose(fp);
-	
+
 	printf("done \n");
 	
 	

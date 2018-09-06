@@ -2,7 +2,7 @@
  * File: egetty.c
  * Implements: ethernet getty
  *
- * Copyright: Jens Låås, 2011
+ * Copyright: Jens Lï¿½ï¿½s, 2011
  * Copyright license: According to GPL, see file COPYING in this directory.
  *
  */
@@ -369,7 +369,7 @@ int main(int argc, char **argv, char **arge)
 	conf.debug = 0;
 	conf.device = "eth0";
 	conf.devsocket = -1;
-	
+
 	while(--argc > 0) {
 		if(strcmp(argv[argc], "debug")==0) {
 			printf("Debug mode\n");
@@ -653,8 +653,8 @@ int main(int argc, char **argv, char **arge)
 					
 				}else if (*p == EGETTY_PULL_START_REQUEST){
 					p++;
-					//printf("Got EGETTY_PULL_PART_REQUEST \n");
-					uint32_t len;
+					printf("Got EGETTY_PULL_START_REQUEST \n");
+					uint32_t len = 0;
 					uint64_t file_size = 0;
 					char* file_path;
 					
@@ -662,14 +662,14 @@ int main(int argc, char **argv, char **arge)
 					len = len | ( (*p++) << 16);
 					len = len | ( (*p++) << 8);
 					len = len |   (*p++);
-					
+
 					for (i=0; i<len; i++){
 						streambuf[i] = (*p++);
 					}
 					streambuf[i] = NULL;
 					file_path = streambuf;
 					if (get_filesize(file_path, &file_size) < 0){
-						//printf("could not get file size, file not accessible\n");
+						printf("could not get file size, file not accessible\n");
 						skb_reset(skb);
 						p = skb_put(skb, 1);
 						*p++ = EGETTY_ERROR;
@@ -694,8 +694,9 @@ int main(int argc, char **argv, char **arge)
 					continue;
 				}else if (*p == EGETTY_PULL_PART_REQUEST){
 					p++;
-					uint64_t file_offset;
-					uint32_t payload_size;
+					printf("Got EGETTY_PULL_PART_REQUEST \n");
+					uint64_t file_offset = 0;
+					uint32_t payload_size = 0;
 					
 					file_offset = file_offset | ( (*p++) << 56);
 					file_offset = file_offset | ( (*p++) << 48);
@@ -710,9 +711,8 @@ int main(int argc, char **argv, char **arge)
 					payload_size = payload_size | ( (*p++) << 16);
 					payload_size = payload_size | ( (*p++) << 8);
 					payload_size = payload_size |   (*p++);
-					
+
 					fseek(pull_fd, file_offset, SEEK_SET);
-					//printf("reading %d bytes \n", payload_size);
 					fread(pull_buf, payload_size, 1, pull_fd);
 					
 					skb_reset(skb);
@@ -724,7 +724,7 @@ int main(int argc, char **argv, char **arge)
 					*p++ = (payload_size >> 16) & 0xFF;
 					*p++ = (payload_size >> 8) & 0xFF;
 					*p++ = (payload_size & 0xFF);
-					
+
 					p = skb_put(skb, payload_size);
 					memcpy(p, pull_buf, payload_size);
 					send_to_econsole(s, ifindex, skb);
