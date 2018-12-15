@@ -61,9 +61,9 @@ struct {
 	
 	struct termios term;
 } conf;
-static int get_interfaces(char** inter_options)
+static void get_interfaces(char** inter_options)
 {
-int t=0;
+ int t=0;
 struct ifaddrs *addrs,*tmp;
 getifaddrs(&addrs);
 tmp = addrs;
@@ -72,6 +72,24 @@ while (tmp)
     if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_PACKET)
 {
         strcpy(inter_options[t],tmp->ifa_name);
+}
+
+    tmp = tmp->ifa_next;
+    t++;
+}
+
+}
+
+static int get_num_of_available_interfaces()
+{
+  int t=0;
+ struct ifaddrs *addrs,*tmp;
+ getifaddrs(&addrs);
+  tmp = addrs;
+while (tmp)
+{
+    if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_PACKET)
+{
         t++;
 }
 
@@ -1181,8 +1199,9 @@ int main(int argc, char **argv)
 	char push_file[1024], push_dest_path[1024];
 	char pull_file[1024], pull_dest_path[1024];
 	int use_mac,use_iface;
-	int do_ping, do_push, do_devices, do_shell, do_pull,count, log;;
-	
+	int do_ping, do_push, do_devices, do_shell, do_pull,count, log;
+	int num_of_interfaces=0;
+    int connect=0;
 	use_mac = 0;
 	use_iface = 0;
 	do_ping = 0;
@@ -1193,7 +1212,16 @@ int main(int argc, char **argv)
 	log=0;
 	argc--;
 	argv++;
+    num_of_interfaces=get_num_of_available_interfaces();
+   	char** inters=(char**)malloc(100*sizeof(char*));
+    for(int b=0;b<num_of_interfaces;b++)
+   {
+
+   inters[b]=(char*)malloc(100*sizeof(char));
+
+   }
 	
+  get_interfaces(inters);
 
 	while(argc > 0){
 		if (strcmp(argv[0],"-i") == 0){
@@ -1277,16 +1305,8 @@ int main(int argc, char **argv)
        count++;
 	}
 	
-	char** inters=(char**)malloc(100*sizeof(char*));
-    for(int b=0;b<100;b++)
-{
 
-   inters[b]=(char*)malloc(100*sizeof(char));
 
-}
-
-int num_of_interfaces=0;
-num_of_interfaces=get_interfaces(inters);
 
 
 	if ((do_devices + do_ping + do_shell + do_push + do_pull+log) != 1){
@@ -1295,6 +1315,7 @@ num_of_interfaces=get_interfaces(inters);
 	}
 
 	conf.devsocket = devsocket();
+
 for(int h=0;h<num_of_interfaces;h++)
 {
    
@@ -1339,7 +1360,6 @@ for(int h=0;h<num_of_interfaces;h++)
 
 	}
 
-int connect=0;
 skb = alloc_skb(1500);
         connect=console_mod_devices(conf.s,conf.ifindex,skb,NULL);
 
@@ -1349,6 +1369,7 @@ if(connect)
   break;
 
 }
+
 }
 
 	
