@@ -529,7 +529,7 @@ int main(int argc, char **argv, char **arge)
 					continue;
 				}
 
-                  else if(*p == 8)
+                  else if(*p == 120)
                {
                    printf("receiving log file\n");
                    skb_reset(skb);

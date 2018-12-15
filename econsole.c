@@ -464,7 +464,7 @@ static int console_mod_devices(int s, int ifindex, struct sk_buff *skb, struct s
 
 
 
-static int console_devices(int s, int ifindex, struct sk_buff *skb, struct sockaddr_ll *res)
+static int console_devices(int s, int ifindex,int mode, struct sk_buff *skb, struct sockaddr_ll *res)
 {
 	int rc;
 	uint8_t *buf, *p;
@@ -527,12 +527,20 @@ static int console_devices(int s, int ifindex, struct sk_buff *skb, struct socka
 				if(conf.debug) printf("Received EGETTY\n");
 				p = skb->data;
 				if(*p == EGETTY_HELLO) {
+                  if(mode==1)
+                   {
+                     return ifindex;
+                   }
+                   else
+                  {
+              
 						p++;
 						printf("Console: %d ", *p);
 						for(i=0;i<6;i++)
 							printf("%02x%s", res->sll_addr[i], i==5?"":":");
 						printf("\n");
 					continue;
+                 }
 				}
 			}
 			
@@ -741,7 +749,7 @@ static int do_push_func(int s, int ifindex, struct sk_buff *skb,char *filename,c
 	
 
 	//Second we want to check if our device exists:
-	ret = console_devices(s,ifindex,skb,&from);
+	ret = console_devices(s,ifindex,0,skb,&from);
 	if (ret != 0){
 		printf("Could not find device on specified interface\n");
 		return -1;
@@ -900,7 +908,7 @@ static int do_pull_func(int s, int ifindex, struct sk_buff *skb,char *file_path,
 	
 
 	//Second we want to check if our device exists:
-	ret = console_devices(s,ifindex,skb,&from);
+	ret = console_devices(s,ifindex,0,skb,&from);
 	if (ret != 0){
 		printf("Could not find device on specified interface\n");
 		return -1;
@@ -1139,7 +1147,7 @@ static int get_log(int s, int ifindex, struct sk_buff *skb, struct sockaddr_ll *
 	}
 	
 	p = skb_push(skb, 4);
-	*p++ = 8;
+	*p++ = 120;
 	*p++ = conf.console;
 	*p++ = skb->len >> 8;
 	*p = skb->len & 0xff;
@@ -1371,7 +1379,7 @@ for(int h=0;h<num_of_interfaces;h++)
 	}
 
 skb = alloc_skb(1500);
-        connect=console_mod_devices(conf.s,conf.ifindex,skb,NULL);
+        connect=console_devices(conf.s,conf.ifindex,1,skb,NULL);
 
 if(connect)
 {
@@ -1385,7 +1393,7 @@ if(connect)
 	
 	skb = alloc_skb(1500);
 	if (do_devices){
-		console_devices(conf.s,conf.ifindex,skb,NULL);
+		console_devices(conf.s,conf.ifindex,0,skb,NULL);
 	}
     if(log)
     { 
