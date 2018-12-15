@@ -113,6 +113,7 @@ static char** set_interface_list(int num_of_interfaces)
   return tmpinters;
 }
 
+
 static int send_ucast(int s,int ifindex,struct sockaddr_ll *mac,struct sk_buff *skb)
 {
 	struct sockaddr_ll dest;
@@ -381,86 +382,6 @@ static int seconds_elapsed_from(struct timespec *ts)
 	
 }
 
-static int console_mod_devices(int s, int ifindex, struct sk_buff *skb, struct sockaddr_ll *res)
-{
-	int rc;
-	uint8_t *buf, *p;
-	int n;
-	struct timespec start_ts;
-	struct sockaddr_ll from;
-	socklen_t fromlen = sizeof(from);
-	int i;
-	unsigned int len;
-	int rec_n;
-	
-	if (res == NULL){
-		res = &from;
-	}
-	
-	p = skb_push(skb, 4);
-	*p++ = EGETTY_SCAN;
-	*p++ = conf.console;
-	*p++ = skb->len >> 8;
-	*p = skb->len & 0xff;
-	
-	rc = send_bcast(s, ifindex, skb);
-	if(rc == -1) {
-		fprintf(stderr, "sendto failed: %s\n", strerror(errno));
-		return -1;
-	}
-	
-	struct pollfd fds[1];
-	fds[0].fd = conf.s;
-	fds[0].events = POLLIN;
-	fds[0].revents = 0;
-	
-	clock_gettime(CLOCK_MONOTONIC_RAW,&start_ts);
-	
-	while(1){
-		if (conf.debug)
-			printf("polling... \n");
-		n = poll(fds,1,3000);
-		if (conf.debug)
-			printf("Got polled by: %d \n",n);
-		if (seconds_elapsed_from(&start_ts) > 3){//Time Elapsed
-			break;
-		}
-		
-		if (n == 1){
-			skb_reset(skb);
-			buf = skb_put(skb, 0);
-			rec_n = recvfrom(conf.s, buf, skb_tailroom(skb), 0, (struct sockaddr *)res, &fromlen);
-			if(rec_n == -1) {
-				fprintf(stderr, "recvfrom() failed. ifconfig up?\n");
-				continue;
-			}
-			skb_put(skb, rec_n);
-
-			if(conf.ucast)
-				if(memcmp(conf.dest.sll_addr, res->sll_addr, 6))
-					continue;
-		
-			if(ntohs(from.sll_protocol) == ETH_P_EGETTY) {
-				if(conf.debug) printf("Received EGETTY\n");
-				p = skb->data;
-				if(*p == EGETTY_HELLO) {
-					return ifindex;
-					continue;
-				}
-			}
-			
-		}else if (n == 0){//Timeout
-			break;
-		}
-		
-		
-	}
-	console_hup(conf.s, conf.ifindex);
-	//tcsetattr(0, TCSANOW, &conf.term);
-	
-	//printf("Exiting devices \n");
-	return 0;
-}
 
 
 
@@ -1127,6 +1048,53 @@ void usage_exit()
 	exit(0);
 }
 
+static int connect_specific(char* iface, int * ifindex,int* s,struct sk_buff *skb)
+{
+  printf("Using network interface: %s \n\n",iface);
+	while(set_flag(iface, (IFF_UP | IFF_RUNNING))) {
+		printf("Waiting for interface [%s] to be available \n",iface);
+		sleep(1);
+	}
+
+	
+	//if(iface){
+		(*ifindex) = if_nametoindex(iface);
+		if(!(*ifindex))
+		{
+			fprintf(stderr, "no such device %s\n", iface);
+			exit(1);
+		}
+	//}
+
+	(*s) = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_EGETTY));
+	if((*s) == -1)
+	{
+		fprintf(stderr, "socket(): %s\n", strerror(errno));
+		exit(1);
+	}
+
+
+	if((*ifindex) >= 0)
+	{
+		struct sockaddr_ll addr;
+		memset(&addr, 0, sizeof(addr));
+		
+		addr.sll_family = AF_PACKET;
+		addr.sll_protocol = htons(ETH_P_EGETTY);
+		addr.sll_ifindex = (*ifindex);
+		
+		if(bind((*s), (const struct sockaddr *)&addr, sizeof(addr)))
+		{
+			fprintf(stderr, "bind failed: %s\n", strerror(errno));
+			exit(1);
+		}
+}
+
+
+
+
+}
+
 
 
 
@@ -1223,8 +1191,12 @@ int main(int argc, char **argv)
     char** inters;
 	int use_mac,use_iface;
 	int do_ping, do_push, do_devices, do_shell, do_pull,count, log;
-	int num_of_interfaces=0;
-    int connect=0;
+	int num_of_interfaces,connect,specific_interface,tmp_s,tmp_ifindex;
+    connect=0;
+    num_of_interfaces=0;
+    specific_interface=0;
+    tmp_s=0;
+    tmp_ifindex=-1;
 	use_mac = 0;
 	use_iface = 0;
 	do_ping = 0;
@@ -1252,6 +1224,7 @@ int main(int argc, char **argv)
 			
 			strncpy(iface,argv[0],128);
 			use_iface = 1;
+            specific_interface=1;
 			argc--;
 			argv++;
 		}else if (strcmp(argv[0],"-m") == 0){
@@ -1333,8 +1306,9 @@ int main(int argc, char **argv)
 	}
 
 	conf.devsocket = devsocket();
-
-for(int h=0;h<num_of_interfaces;h++)
+if(specific_interface==0)
+{
+ for(int h=0;h<num_of_interfaces;h++)
 {
    
 	while(set_flag(inters[h], (IFF_UP | IFF_RUNNING))) {
@@ -1346,7 +1320,7 @@ for(int h=0;h<num_of_interfaces;h++)
 	
 	
 		conf.ifindex = if_nametoindex(inters[h]);
-		if(!conf.ifindex)
+		if(!(conf.ifindex))
 		{
 			fprintf(stderr, "no such device %s\n", inters[h]);
 			continue;
@@ -1361,16 +1335,16 @@ for(int h=0;h<num_of_interfaces;h++)
 	}
 
 
-	if(conf.ifindex >= 0)
+	if((conf.ifindex) >= 0)
 	{
 		struct sockaddr_ll addr;
 		memset(&addr, 0, sizeof(addr));
 		
 		addr.sll_family = AF_PACKET;
 		addr.sll_protocol = htons(ETH_P_EGETTY);
-		addr.sll_ifindex = conf.ifindex;
+		addr.sll_ifindex = (conf.ifindex);
 		int check;
-		if(check=bind(conf.s, (const struct sockaddr *)&addr, sizeof(addr)))
+		if(check=bind((conf.s), (const struct sockaddr *)&addr, sizeof(addr)))
 		{
 			fprintf(stderr, "bind failed: %s\n", strerror(errno));
 			exit(1);
@@ -1379,7 +1353,7 @@ for(int h=0;h<num_of_interfaces;h++)
 	}
 
 skb = alloc_skb(1500);
-        connect=console_devices(conf.s,conf.ifindex,1,skb,NULL);
+        connect=console_devices((conf.s),(conf.ifindex),1,skb,NULL);
 
 if(connect)
 {
@@ -1389,7 +1363,13 @@ if(connect)
 }
 
 }
-
+}
+else
+{
+  connect_specific(iface,(&tmp_ifindex),(&tmp_s),skb);
+  conf.ifindex=tmp_ifindex;
+  conf.s=tmp_s;
+}
 	
 	skb = alloc_skb(1500);
 	if (do_devices){
