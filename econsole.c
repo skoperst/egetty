@@ -1048,7 +1048,7 @@ void usage_exit()
 	exit(0);
 }
 
-static int connect_specific(char* iface, int * ifindex,int* s,struct sk_buff *skb)
+static int connect_specific_interface(char* iface,struct sk_buff *skb)
 {
   printf("Using network interface: %s \n\n",iface);
 	while(set_flag(iface, (IFF_UP | IFF_RUNNING))) {
@@ -1058,44 +1058,102 @@ static int connect_specific(char* iface, int * ifindex,int* s,struct sk_buff *sk
 
 	
 	//if(iface){
-		(*ifindex) = if_nametoindex(iface);
-		if(!(*ifindex))
+		conf.ifindex = if_nametoindex(iface);
+		if(!(conf.ifindex))
 		{
 			fprintf(stderr, "no such device %s\n", iface);
 			exit(1);
 		}
 	//}
 
-	(*s) = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_EGETTY));
-	if((*s) == -1)
+	conf.s = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_EGETTY));
+	if(conf.s == -1)
 	{
 		fprintf(stderr, "socket(): %s\n", strerror(errno));
 		exit(1);
 	}
 
 
-	if((*ifindex) >= 0)
+	if((conf.ifindex) >= 0)
 	{
 		struct sockaddr_ll addr;
 		memset(&addr, 0, sizeof(addr));
 		
 		addr.sll_family = AF_PACKET;
 		addr.sll_protocol = htons(ETH_P_EGETTY);
-		addr.sll_ifindex = (*ifindex);
-		
-		if(bind((*s), (const struct sockaddr *)&addr, sizeof(addr)))
+		addr.sll_ifindex = (conf.ifindex);
+		int check;
+		if(check=bind((conf.s), (const struct sockaddr *)&addr, sizeof(addr)))
 		{
 			fprintf(stderr, "bind failed: %s\n", strerror(errno));
 			exit(1);
 		}
+
+	}
+
+
+
+}
+
+static int connect_to_listner(int num_of_interfaces,char** inters,struct sk_buff *skb)
+{
+  int connect=0;
+   for(int h=0;h<num_of_interfaces;h++)
+{
+   
+	while(set_flag(inters[h], (IFF_UP | IFF_RUNNING))) {
+		printf("Waiting for interface [%s] to be available \n",inters[h]);
+		sleep(1);
+	}
+  
+	
+		conf.ifindex = if_nametoindex(inters[h]);
+		if(!(conf.ifindex))
+		{
+			fprintf(stderr, "no such device %s\n", inters[h]);
+			continue;
+		}
+	
+    //(conf.s).close();
+	conf.s = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_EGETTY));
+	if((conf.s) == -1)
+	{
+		fprintf(stderr, "socket(): %s\n", strerror(errno));
+		exit(1);
+	}
+
+
+	if((conf.ifindex) >= 0)
+	{
+		struct sockaddr_ll addr;
+		memset(&addr, 0, sizeof(addr));
+		
+		addr.sll_family = AF_PACKET;
+		addr.sll_protocol = htons(ETH_P_EGETTY);
+		addr.sll_ifindex = (conf.ifindex);
+		int check;
+		if(check=bind((conf.s), (const struct sockaddr *)&addr, sizeof(addr)))
+		{
+			fprintf(stderr, "bind failed: %s\n", strerror(errno));
+			exit(1);
+		}
+
+	}
+
+skb = alloc_skb(1500);
+        connect=console_devices((conf.s),(conf.ifindex),1,skb,NULL);
+
+if(connect)
+{
+  printf("connected interface is: %s\n\n",inters[h]);
+  break;
+
+}
+
 }
 
 
-
-
 }
-
-
 
 
 static int get_log(int s, int ifindex, struct sk_buff *skb, struct sockaddr_ll *res)
@@ -1308,68 +1366,17 @@ int main(int argc, char **argv)
 	conf.devsocket = devsocket();
 if(specific_interface==0)
 {
- for(int h=0;h<num_of_interfaces;h++)
-{
-   
-	while(set_flag(inters[h], (IFF_UP | IFF_RUNNING))) {
-		printf("Waiting for interface [%s] to be available \n",inters[h]);
-		sleep(1);
-	}
-  
+  connect_to_listner(num_of_interfaces,inters,skb);
+ 
 
-	
-	
-		conf.ifindex = if_nametoindex(inters[h]);
-		if(!(conf.ifindex))
-		{
-			fprintf(stderr, "no such device %s\n", inters[h]);
-			continue;
-		}
-	
-    //(conf.s).close();
-	conf.s = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_EGETTY));
-	if(conf.s == -1)
-	{
-		fprintf(stderr, "socket(): %s\n", strerror(errno));
-		exit(1);
-	}
-
-
-	if((conf.ifindex) >= 0)
-	{
-		struct sockaddr_ll addr;
-		memset(&addr, 0, sizeof(addr));
-		
-		addr.sll_family = AF_PACKET;
-		addr.sll_protocol = htons(ETH_P_EGETTY);
-		addr.sll_ifindex = (conf.ifindex);
-		int check;
-		if(check=bind((conf.s), (const struct sockaddr *)&addr, sizeof(addr)))
-		{
-			fprintf(stderr, "bind failed: %s\n", strerror(errno));
-			exit(1);
-		}
-
-	}
-
-skb = alloc_skb(1500);
-        connect=console_devices((conf.s),(conf.ifindex),1,skb,NULL);
-
-if(connect)
-{
-  printf("connected interface is: %s\n\n",inters[h]);
-  break;
-
-}
-
-}
 }
 else
 {
-  connect_specific(iface,(&tmp_ifindex),(&tmp_s),skb);
-  conf.ifindex=tmp_ifindex;
-  conf.s=tmp_s;
+  connect_specific_interface(iface,skb);
+ 
 }
+
+
 	
 	skb = alloc_skb(1500);
 	if (do_devices){
