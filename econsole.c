@@ -55,16 +55,16 @@ struct {
 	int row, col;
 	int s;
 	int ifindex;
+    
 	
 	struct sockaddr_ll dest;
 	
 	struct termios term;
 } conf;
-
-static void get_interfaces(char** inter_options)
+static int get_interfaces(char** inter_options)
 {
-struct ifaddrs *addrs,*tmp;
 int t=0;
+struct ifaddrs *addrs,*tmp;
 getifaddrs(&addrs);
 tmp = addrs;
 while (tmp)
@@ -77,6 +77,7 @@ while (tmp)
 
     tmp = tmp->ifa_next;
 }
+return t;
 
 }
 
@@ -1086,6 +1087,81 @@ void usage_exit()
 	exit(0);
 }
 
+
+
+
+static int get_log(int s, int ifindex, struct sk_buff *skb, struct sockaddr_ll *res)
+{
+	int rc;
+	uint8_t *buf, *p;
+	int n;
+	struct timespec start_ts;
+	struct sockaddr_ll from;
+	socklen_t fromlen = sizeof(from);
+	int i;
+	unsigned int len;
+	int rec_n;
+	
+	if (res == NULL){
+		res = &from;
+	}
+	
+	p = skb_push(skb, 4);
+	*p++ = 8;
+	*p++ = conf.console;
+	*p++ = skb->len >> 8;
+	*p = skb->len & 0xff;
+
+	rc = send_bcast(s, ifindex, skb);
+	if(rc == -1) {
+		fprintf(stderr, "sendto failed: %s\n", strerror(errno));
+		return -1;
+	}
+	
+	struct pollfd fds[1];
+	fds[0].fd = conf.s;
+	fds[0].events = POLLIN;
+	fds[0].revents = 0;
+	
+	clock_gettime(CLOCK_MONOTONIC_RAW,&start_ts);
+	while(1){
+		if (conf.debug)
+			printf("polling... \n");
+		n = poll(fds,1,3000);
+		if (conf.debug)
+			printf("Got polled by: %d \n",n);
+		if (seconds_elapsed_from(&start_ts) > 3){//Time Elapsed
+			break;
+		}
+		
+		if (n == 1){
+			skb_reset(skb);
+			buf = skb_put(skb, 0);
+			rec_n = recvfrom(conf.s, buf, skb_tailroom(skb), 0, (struct sockaddr *)res, &fromlen);
+			if(rec_n == -1) {
+				fprintf(stderr, "recvfrom() failed. ifconfig up?\n");
+				continue;
+			}
+			skb_put(skb, rec_n);
+
+			if(conf.ucast)
+				if(memcmp(conf.dest.sll_addr, res->sll_addr, 6))
+					continue;
+			p = skb->data;
+          	printf("heyhyhey\n");
+		}else if (n == 0){//Timeout
+			break;
+		}
+		
+		
+	}
+	console_hup(conf.s, conf.ifindex);
+	//tcsetattr(0, TCSANOW, &conf.term);
+	
+	//printf("Exiting devices \n");
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 
@@ -1105,7 +1181,7 @@ int main(int argc, char **argv)
 	char push_file[1024], push_dest_path[1024];
 	char pull_file[1024], pull_dest_path[1024];
 	int use_mac,use_iface;
-	int do_ping, do_push, do_devices, do_shell, do_pull,count;
+	int do_ping, do_push, do_devices, do_shell, do_pull,count, log;;
 	
 	use_mac = 0;
 	use_iface = 0;
@@ -1114,7 +1190,7 @@ int main(int argc, char **argv)
 	do_devices = 0;
 	do_shell = 0;
 	do_pull = 0;
-	
+	log=0;
 	argc--;
 	argv++;
 	
@@ -1150,7 +1226,18 @@ int main(int argc, char **argv)
 			do_shell = 1;
 			argc--;
 			argv++;
-		}else if (strcmp(argv[0],"push") == 0){
+          
+		}
+ 
+          else if (strcmp(argv[0],"log") == 0)
+          {
+            log=1;
+            argc--;
+            argv++;
+
+           }
+          
+           else if (strcmp(argv[0],"push") == 0){
 			argc--;
 			argv++;
 			if (argc < 2){
@@ -1198,24 +1285,24 @@ int main(int argc, char **argv)
 
 }
 
-get_interfaces(inters);
+int num_of_interfaces=0;
+num_of_interfaces=get_interfaces(inters);
 
 
-	if ((do_devices + do_ping + do_shell + do_push + do_pull) != 1){
+	if ((do_devices + do_ping + do_shell + do_push + do_pull+log) != 1){
 		printf("Must select only 1 command \n");
 		usage_exit();
 	}
 
-	
 	conf.devsocket = devsocket();
-for(int h=0;h<5;h++)
+for(int h=0;h<num_of_interfaces;h++)
 {
    
 	while(set_flag(inters[h], (IFF_UP | IFF_RUNNING))) {
 		printf("Waiting for interface [%s] to be available \n",inters[h]);
 		sleep(1);
 	}
-   
+  
 
 	
 	
@@ -1269,6 +1356,13 @@ if(connect)
 	if (do_devices){
 		console_devices(conf.s,conf.ifindex,skb,NULL);
 	}
+    if(log)
+    { 
+      printf("receiving log files \n");
+      get_log(conf.s,conf.ifindex,skb,NULL);
+
+
+    }
 	
 	if (do_shell){
 		terminal_settings();

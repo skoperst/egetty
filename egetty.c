@@ -36,7 +36,6 @@
 #include "egetty.h"
 
 #include "skbuff.h"
-
 static char **envp;
 
 struct {
@@ -112,12 +111,14 @@ int putfd(int fd, char *s)
 	return 0;
 }
 
-pid_t logcat(int *fd)
+pid_t logcat(int s, int ifindex, struct sk_buff *skb)
 {
 	pid_t pid;
 	int amaster, tty, rc=0;
 	char name[256];
+send_to_econsole(s,ifindex,skb);
 
+/*
 	pid = forkpty(&amaster, name,NULL, NULL);
 	if(pid == 0) {
 		
@@ -134,7 +135,7 @@ pid_t logcat(int *fd)
 	}
 	if(pid == -1) return -1;
 	*fd = amaster;
-
+*/
 	return pid;
 }
 
@@ -440,13 +441,12 @@ int main(int argc, char **argv, char **arge)
 			exit(1);
 		}
 	}
-	
+	 printf("im here \n");
 	skb = alloc_skb(1500);
 
 	skb_reset(skb);
 	skb_reserve(skb, 4);
 	console_hello(s, ifindex, skb);
-	
 	while(1)
 	{
 		struct pollfd fds[2];
@@ -527,7 +527,19 @@ int main(int argc, char **argv, char **arge)
 					skb_reserve(skb, 4);
 					console_hello(s, ifindex, skb);
 					continue;
-				}else if (*p == EGETTY_PUSH_START){
+				}
+
+                  else if(*p == 8)
+               {
+                   printf("receiving log file\n");
+                   skb_reset(skb);
+				   skb_reserve(skb, 4);
+                   
+                   logcat(s,ifindex,skb);
+                   continue;
+
+                }
+                  else if (*p == EGETTY_PUSH_START){
 					p++;
 					printf("Got EGETTY_PUSH_START push start \n");
 					int len1 = *p++;
