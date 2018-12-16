@@ -1375,8 +1375,8 @@ int main(int argc, char **argv)
 	}
     if(log){
      
-      printf("receiving log files \n");
-      get_log(conf.s,conf.ifindex,skb,NULL);
+        printf("receiving log files \n");
+        get_log(conf.s,conf.ifindex,skb,NULL);
     }
 	
 	if (do_shell){
