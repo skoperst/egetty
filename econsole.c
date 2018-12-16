@@ -61,56 +61,58 @@ struct {
 	
 	struct termios term;
 } conf;
+
 static void get_interfaces(char** inter_options)
 {
- int t=0;
-struct ifaddrs *addrs,*tmp;
-getifaddrs(&addrs);
-tmp = addrs;
-while (tmp)
-{
-    if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_PACKET)
-{
-        strcpy(inter_options[t],tmp->ifa_name);
-}
+    int t=0;
+    struct ifaddrs *addrs,*tmp;
+    getifaddrs(&addrs);
+    tmp = addrs;
+    while (tmp)
+    {
+        if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_PACKET)
+        {
+            strcpy(inter_options[t],tmp->ifa_name);
+        }
 
-    tmp = tmp->ifa_next;
-    t++;
-}
+        tmp = tmp->ifa_next;
+        t++;
+    }
 
 }
 
 static int get_num_of_available_interfaces()
 {
-  int t=0;
- struct ifaddrs *addrs,*tmp;
- getifaddrs(&addrs);
-  tmp = addrs;
-while (tmp)
-{
-    if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_PACKET)
-{
-        t++;
-}
+    int t=0;
+    struct ifaddrs *addrs,*tmp;
+    getifaddrs(&addrs);
+    tmp = addrs;
+    while (tmp)
+    {
+        if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_PACKET)
+        {
+            t++;
+        }
 
-    tmp = tmp->ifa_next;
-}
-return t;
+        tmp = tmp->ifa_next;
+    }
+
+    return t;
 
 }
 
 static char** set_interface_list(int num_of_interfaces)
 {
 
-  char** tmpinters=(char**)malloc(num_of_interfaces*sizeof(char*));
+    char** tmpinters=(char**)malloc(num_of_interfaces*sizeof(char*));
     for(int b=0;b<num_of_interfaces;b++)
-   {
+    {
 
-      tmpinters[b]=(char*)malloc(100*sizeof(char));
+        tmpinters[b]=(char*)malloc(100*sizeof(char));
 
-   }
+    }
    
-  return tmpinters;
+    return tmpinters;
 }
 
 
@@ -448,12 +450,12 @@ static int console_devices(int s, int ifindex,int mode, struct sk_buff *skb, str
 				if(conf.debug) printf("Received EGETTY\n");
 				p = skb->data;
 				if(*p == EGETTY_HELLO) {
-                  if(mode==1)
-                   {
-                     return ifindex;
-                   }
-                   else
-                  {
+                    if(mode==1){
+                   
+                        return ifindex;
+                    }
+                    else{
+                  
               
 						p++;
 						printf("Console: %d ", *p);
@@ -1050,21 +1052,21 @@ void usage_exit()
 
 static int connect_specific_interface(char* iface,struct sk_buff *skb)
 {
-  printf("Using network interface: %s \n\n",iface);
+    printf("Using network interface: %s \n\n",iface);
+
 	while(set_flag(iface, (IFF_UP | IFF_RUNNING))) {
 		printf("Waiting for interface [%s] to be available \n",iface);
 		sleep(1);
 	}
 
 	
-	//if(iface){
-		conf.ifindex = if_nametoindex(iface);
-		if(!(conf.ifindex))
-		{
-			fprintf(stderr, "no such device %s\n", iface);
-			exit(1);
-		}
-	//}
+	conf.ifindex = if_nametoindex(iface);
+	if(!(conf.ifindex)){
+	
+		fprintf(stderr, "no such device %s\n", iface);
+		exit(1);
+	}
+	
 
 	conf.s = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_EGETTY));
 	if(conf.s == -1)
@@ -1097,60 +1099,60 @@ static int connect_specific_interface(char* iface,struct sk_buff *skb)
 
 static int connect_to_listner(int num_of_interfaces,char** inters,struct sk_buff *skb)
 {
-  int connect=0;
-   for(int h=0;h<num_of_interfaces;h++)
-{
+    int connect=0;
+    for(int h=0;h<num_of_interfaces;h++)
+    {   
    
-	while(set_flag(inters[h], (IFF_UP | IFF_RUNNING))) {
-		printf("Waiting for interface [%s] to be available \n",inters[h]);
-		sleep(1);
-	}
+	    while(set_flag(inters[h], (IFF_UP | IFF_RUNNING))) {
+		    printf("Waiting for interface [%s] to be available \n",inters[h]);
+		    sleep(1);
+	    }
   
 	
 		conf.ifindex = if_nametoindex(inters[h]);
-		if(!(conf.ifindex))
-		{
+		if(!(conf.ifindex)){
+		
 			fprintf(stderr, "no such device %s\n", inters[h]);
 			continue;
 		}
 	
-    //(conf.s).close();
-	conf.s = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_EGETTY));
-	if((conf.s) == -1)
-	{
-		fprintf(stderr, "socket(): %s\n", strerror(errno));
-		exit(1);
-	}
+        close(conf.s);
+	    conf.s = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_EGETTY));
+	    if((conf.s) == -1)
+	    {
+		    fprintf(stderr, "socket(): %s\n", strerror(errno));
+		    exit(1);
+	    }
 
 
-	if((conf.ifindex) >= 0)
-	{
-		struct sockaddr_ll addr;
-		memset(&addr, 0, sizeof(addr));
+	    if((conf.ifindex) >= 0){
+	    
+		    struct sockaddr_ll addr;
+		    memset(&addr, 0, sizeof(addr));
 		
-		addr.sll_family = AF_PACKET;
-		addr.sll_protocol = htons(ETH_P_EGETTY);
-		addr.sll_ifindex = (conf.ifindex);
-		int check;
-		if(check=bind((conf.s), (const struct sockaddr *)&addr, sizeof(addr)))
-		{
-			fprintf(stderr, "bind failed: %s\n", strerror(errno));
-			exit(1);
-		}
+		    addr.sll_family = AF_PACKET;
+		    addr.sll_protocol = htons(ETH_P_EGETTY);
+		    addr.sll_ifindex = (conf.ifindex);
+		    int check;
+		    if(check=bind((conf.s), (const struct sockaddr *)&addr, sizeof(addr)))
+		    {
+			    fprintf(stderr, "bind failed: %s\n", strerror(errno));
+			    exit(1);
+		    }
 
-	}
+	    }
 
-skb = alloc_skb(1500);
+        skb = alloc_skb(1500);
         connect=console_devices((conf.s),(conf.ifindex),1,skb,NULL);
 
-if(connect)
-{
-  printf("connected interface is: %s\n\n",inters[h]);
-  break;
+        if(connect){
 
-}
+            printf("connected interface is: %s\n\n",inters[h]);
+            break;
 
-}
+        }
+
+    }
 
 
 }
@@ -1193,7 +1195,7 @@ static int get_log(int s, int ifindex, struct sk_buff *skb, struct sockaddr_ll *
 	while(1){
 		if (conf.debug)
 			printf("polling... \n");
-		n = poll(fds,1,3000);
+		    n = poll(fds,1,3000);
 		if (conf.debug)
 			printf("Got polled by: %d \n",n);
 		if (seconds_elapsed_from(&start_ts) > 3){//Time Elapsed
@@ -1222,9 +1224,7 @@ static int get_log(int s, int ifindex, struct sk_buff *skb, struct sockaddr_ll *
 		
 	}
 	console_hup(conf.s, conf.ifindex);
-	//tcsetattr(0, TCSANOW, &conf.term);
-	
-	//printf("Exiting devices \n");
+		
 	return 0;
 }
 
@@ -1304,18 +1304,15 @@ int main(int argc, char **argv)
 			argc--;
 			argv++;
           
-		}
- 
-          else if (strcmp(argv[0],"log") == 0)
-          {
+        }else if (strcmp(argv[0],"log") == 0){
+         
             log=1;
             argc--;
             argv++;
 
-           }
-          
-           else if (strcmp(argv[0],"push") == 0){
-			argc--;
+                    
+         }else if (strcmp(argv[0],"push") == 0){
+		    argc--;
 			argv++;
 			if (argc < 2){
 				usage_exit();
@@ -1357,37 +1354,29 @@ int main(int argc, char **argv)
 
 
 
-
 	if ((do_devices + do_ping + do_shell + do_push + do_pull+log) != 1){
 		printf("Must select only 1 command \n");
 		usage_exit();
 	}
 
 	conf.devsocket = devsocket();
-if(specific_interface==0)
-{
-  connect_to_listner(num_of_interfaces,inters,skb);
- 
-
-}
-else
-{
-  connect_specific_interface(iface,skb);
- 
-}
-
+    if(specific_interface==0){
+    
+        connect_to_listner(num_of_interfaces,inters,skb);    
+    }else{
+    
+        connect_specific_interface(iface,skb); 
+    }
 
 	
 	skb = alloc_skb(1500);
 	if (do_devices){
 		console_devices(conf.s,conf.ifindex,0,skb,NULL);
 	}
-    if(log)
-    { 
+    if(log){
+     
       printf("receiving log files \n");
       get_log(conf.s,conf.ifindex,skb,NULL);
-
-
     }
 	
 	if (do_shell){
@@ -1408,6 +1397,14 @@ else
 		do_pull_func(conf.s, conf.ifindex, skb, pull_file, pull_dest_path);
 		sleep(1);
 	}
+
+     for(int k=0;k<num_of_interfaces;k++)
+    {
+
+        free(inters[k]);
+    }
+
+    free(inters);
 	
 	return 0;
 }
