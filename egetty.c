@@ -1,3 +1,4 @@
+
 /*
  * File: egetty.c
  * Implements: ethernet getty
@@ -116,27 +117,47 @@ pid_t logcat(int s, int ifindex, struct sk_buff *skb)
 	pid_t pid;
 	int amaster, tty, rc=0;
 	char name[256];
-send_to_econsole(s,ifindex,skb);
+    size_t sz;
+	int rc1 = -1;
+    char buf [16392];
+    uint8_t *p;
+    int count;
+    count=0;
+    pid=fork();
+    skb_reset(skb);
+	sz = 16392;
+    skb=alloc_skb(17000);  
+    buf[16392]='\0';
+    if(pid==0)
+    {
+        while(1)
+        {
+            rc1 = klogctl(3, buf, sz);
+            while(count<=16392)
+            {
+                p = skb_push(skb, 9);
+                *p++ = buf[count];
+	            *p++ = buf[count+1];
+	            *p++ = buf[count+2];
+	            *p++ = buf[count+3];
+                *p++ = buf[count+4];
+	            *p++ = buf[count+5];
+	            *p++ = buf[count+6];
+	            *p++ = buf[count+7];
+                *p = '\0';   
+                console_ucast(s,ifindex,skb);
+                count+=8;
+                skb_reset(skb);
+            }   
+   
+        skb_reset(skb);
+        count=0;
+        sleep(3);
+        }
+        exit(1);
 
-/*
-	pid = forkpty(&amaster, name,NULL, NULL);
-	if(pid == 0) {
-		
-		if (access("/system/bin/logcat",F_OK) != -1){
-			char *argv[]={"/system/bin/logcat", "--", 0, 0};
-			(void) execve( argv[0], argv, envp );
-			printf("execve failed\n");
-			exit(1);
-		}else{
-			printf("/system/bin/logcat could not be found \n");
-			exit(1);
-		}
-		
-	}
-	if(pid == -1) return -1;
-	*fd = amaster;
-*/
-	return pid;
+    }
+    return pid;
 }
 
 pid_t login(int *fd)
@@ -533,8 +554,7 @@ int main(int argc, char **argv, char **arge)
                {
                    printf("receiving log file\n");
                    skb_reset(skb);
-				   skb_reserve(skb, 4);
-                   
+				   skb_reserve(skb, 4);    
                    logcat(s,ifindex,skb);
                    continue;
 
@@ -796,3 +816,5 @@ int main(int argc, char **argv, char **arge)
 	}
   exit(0);
 }
+
+

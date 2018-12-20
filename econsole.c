@@ -1,3 +1,4 @@
+
 /*
  * File: econsole.c
  * Implements: ethernet console client
@@ -1024,7 +1025,6 @@ static int do_pull_func(int s, int ifindex, struct sk_buff *skb,char *file_path,
 			printf("Error reading from file! \n");
 			return -1;
 		}
-
 		p = skb_put(skb,payload_size);
 		memcpy(p,fb_buf,payload_size);
 		
@@ -1160,8 +1160,13 @@ static int connect_to_listner(int num_of_interfaces,char** inters,struct sk_buff
 
 static int get_log(int s, int ifindex, struct sk_buff *skb, struct sockaddr_ll *res)
 {
-	int rc;
-	uint8_t *buf, *p;
+
+
+     int retval;
+     int counter=0;
+	 int rc;
+	 uint8_t *buf, *p;
+    char* buf1;
 	int n;
 	struct timespec start_ts;
 	struct sockaddr_ll from;
@@ -1169,6 +1174,8 @@ static int get_log(int s, int ifindex, struct sk_buff *skb, struct sockaddr_ll *
 	int i;
 	unsigned int len;
 	int rec_n;
+    int sz = 16392;
+    buf1 = malloc(sz * sizeof(char));
 	
 	if (res == NULL){
 		res = &from;
@@ -1187,7 +1194,7 @@ static int get_log(int s, int ifindex, struct sk_buff *skb, struct sockaddr_ll *
 	}
 	
 	struct pollfd fds[1];
-	fds[0].fd = conf.s;
+	fds[0].fd = s;
 	fds[0].events = POLLIN;
 	fds[0].revents = 0;
 	
@@ -1195,17 +1202,16 @@ static int get_log(int s, int ifindex, struct sk_buff *skb, struct sockaddr_ll *
 	while(1){
 		if (conf.debug)
 			printf("polling... \n");
-		    n = poll(fds,1,3000);
 		if (conf.debug)
 			printf("Got polled by: %d \n",n);
-		if (seconds_elapsed_from(&start_ts) > 3){//Time Elapsed
-			break;
-		}
 		
+      n = poll(fds,1,3000);
+
+
 		if (n == 1){
-			skb_reset(skb);
+            skb_reset(skb);
 			buf = skb_put(skb, 0);
-			rec_n = recvfrom(conf.s, buf, skb_tailroom(skb), 0, (struct sockaddr *)res, &fromlen);
+			rec_n = recvfrom(s, buf, skb_tailroom(skb), 0, (struct sockaddr *)res, &fromlen);
 			if(rec_n == -1) {
 				fprintf(stderr, "recvfrom() failed. ifconfig up?\n");
 				continue;
@@ -1215,14 +1221,13 @@ static int get_log(int s, int ifindex, struct sk_buff *skb, struct sockaddr_ll *
 			if(conf.ucast)
 				if(memcmp(conf.dest.sll_addr, res->sll_addr, 6))
 					continue;
-			p = skb->data;
-          	printf("heyhyhey\n");
-		}else if (n == 0){//Timeout
-			break;
-		}
-		
-		
+   
+     
+         printf("%s",skb->data);
+    		
 	}
+}
+
 	console_hup(conf.s, conf.ifindex);
 		
 	return 0;
@@ -1408,3 +1413,5 @@ int main(int argc, char **argv)
 	
 	return 0;
 }
+
+
