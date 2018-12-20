@@ -115,45 +115,39 @@ int putfd(int fd, char *s)
 pid_t logcat(int s, int ifindex, struct sk_buff *skb)
 {
 	pid_t pid;
-	int amaster, tty, rc=0;
-	char name[256];
-    size_t sz;
-	int rc1 = -1;
-    char buf [16392];
-    uint8_t *p;
+	uint8_t *p;
+	int kmsg;
+    int size;
     int count;
+    int mode = O_RDONLY;
+    char kmsg_buf[16392];
     count=0;
-    pid=fork();
+    size=0;
+    kmsg=0;
+    kmsg = open("/dev/kmsg", mode);
     skb_reset(skb);
-	sz = 16392;
-    skb=alloc_skb(17000);  
-    buf[16392]='\0';
+    skb=alloc_skb(17000); 
+    pid=fork(); 
     if(pid==0)
     {
         while(1)
         {
-            rc1 = klogctl(3, buf, sz);
-            while(count<=16392)
+            size = read(kmsg, kmsg_buf, sizeof(kmsg_buf) - 1);
+            p = skb_push(skb, size);
+            while(count<=size)
             {
-                p = skb_push(skb, 9);
-                *p++ = buf[count];
-	            *p++ = buf[count+1];
-	            *p++ = buf[count+2];
-	            *p++ = buf[count+3];
-                *p++ = buf[count+4];
-	            *p++ = buf[count+5];
-	            *p++ = buf[count+6];
-	            *p++ = buf[count+7];
-                *p = '\0';   
-                console_ucast(s,ifindex,skb);
-                count+=8;
-                skb_reset(skb);
+                *p++=kmsg_buf[count];
+                 count++;
+                
             }   
    
-        skb_reset(skb);
-        count=0;
-        sleep(3);
+            *p = '\0';   
+            console_ucast(s,ifindex,skb);
+            skb_reset(skb);
+            count=0;
+    
         }
+
         exit(1);
 
     }
