@@ -133,8 +133,8 @@ pid_t logcat(int s, int ifindex, struct sk_buff *skb)
         while(1)
         {
             size = read(kmsg, kmsg_buf, sizeof(kmsg_buf) - 1);
-            p = skb_push(skb, size);
-            while(count<=size)
+            p = skb_push(skb, size+1);
+            while(count<size)
             {
                 *p++=kmsg_buf[count];
                  count++;
