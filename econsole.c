@@ -426,7 +426,14 @@ static int console_devices(int s, int ifindex,int mode, struct sk_buff *skb, str
 	while(1){
 		if (conf.debug)
 			printf("polling... \n");
-		n = poll(fds,1,3000);
+        if(mode==0)
+        {
+		    n = poll(fds,1,3000);
+        }
+        else
+        {
+            n = poll(fds,1,100);
+        }
 		if (conf.debug)
 			printf("Got polled by: %d \n",n);
 		if (seconds_elapsed_from(&start_ts) > 3){//Time Elapsed
