@@ -85,8 +85,12 @@ static void get_interfaces(char** inter_options)
 static int get_num_of_available_interfaces()
 {
     int t=0;
-    struct ifaddrs *addrs,*tmp;
-    getifaddrs(&addrs);
+    struct ifaddrs *addrs = NULL,*tmp;
+    
+    if (getifaddrs(&addrs) == -1){
+		return 0;
+	}
+    
     tmp = addrs;
     while (tmp)
     {
@@ -1104,7 +1108,7 @@ static int connect_specific_interface(char* iface,struct sk_buff *skb)
 
 }
 
-static int connect_to_listner(int num_of_interfaces,char** inters,struct sk_buff *skb)
+static int search_egetty_interface(int num_of_interfaces,char** inters,struct sk_buff *skb, char* interface, int max)
 {
     int connect=0;
     for(int h=0;h<num_of_interfaces;h++)
@@ -1123,7 +1127,6 @@ static int connect_to_listner(int num_of_interfaces,char** inters,struct sk_buff
 			continue;
 		}
 	
-        close(conf.s);
 	    conf.s = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_EGETTY));
 	    if((conf.s) == -1)
 	    {
@@ -1153,8 +1156,10 @@ static int connect_to_listner(int num_of_interfaces,char** inters,struct sk_buff
         connect=console_devices((conf.s),(conf.ifindex),1,skb,NULL);
 
         if(connect){
-
+			strncpy(interface, inters[h], max);
             printf("connected interface is: %s\n\n",inters[h]);
+            //shutdown(conf.s, 2);
+            close(conf.s);
             break;
 
         }
@@ -1279,7 +1284,7 @@ int main(int argc, char **argv)
 	argv++;
 
 
-    num_of_interfaces=get_num_of_available_interfaces();
+    num_of_interfaces = get_num_of_available_interfaces();
    	inters = set_interface_list(num_of_interfaces);
     get_interfaces(inters);
   
@@ -1372,14 +1377,11 @@ int main(int argc, char **argv)
 	}
 
 	conf.devsocket = devsocket();
-    if(specific_interface==0){
-    
-        connect_to_listner(num_of_interfaces,inters,skb);    
-    }else{
-    
-        connect_specific_interface(iface,skb); 
+    if(!specific_interface){//in case no interface specificed, we should search for one.
+        search_egetty_interface(num_of_interfaces, inters, skb, iface, sizeof(iface));    
     }
 
+    connect_specific_interface(iface,skb); 
 	
 	skb = alloc_skb(1500);
 	if (do_devices){

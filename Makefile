@@ -11,8 +11,7 @@ endif
 OUTPUT_DIR := $(TARGET_DIR)
 
 CC=gcc
-CFLAGS+=-Os -Wall
-LDFLAGS+=-static
+CFLAGS+= -Wall 
 LDLIBS+=-lutil
 
 all:	econsole egetty
@@ -30,6 +29,10 @@ egetty:	C_FILES := $(LOCAL_DIR)/egetty.c
 egetty: C_FILES += $(LOCAL_DIR)/skbuff.c
 egetty:
 	$(CC) $(CFLAGS) $(LDFLAGS) $(C_FILES) $(C_INCLUDES) -o $(OUTPUT_DIR)/bin/egetty $(LDLIBS)
+
+test: C_FILES := $(LOCAL_DIR)/test.c
+test:
+	$(CC) $(CFLAGS) $(C_FILES) $(C_INCLUDES) -o $(OUTPUT_DIR)/bin/test 
 	
 clean:	
 	rm -f *.o econsole egetty
