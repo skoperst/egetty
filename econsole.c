@@ -1162,10 +1162,10 @@ static int get_log(int s, int ifindex, struct sk_buff *skb, struct sockaddr_ll *
 {
 
 
-     int retval;
-     int counter=0;
-	 int rc;
-	 uint8_t *buf, *p;
+    int retval;
+    int counter=0;
+	int rc=0;
+	uint8_t *buf, *p;
     char* buf1;
 	int n;
 	struct timespec start_ts;
