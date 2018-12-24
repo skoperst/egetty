@@ -1123,7 +1123,6 @@ static int connect_to_listner(int num_of_interfaces,char** inters,struct sk_buff
 			continue;
 		}
 	
-        close(conf.s);
 	    conf.s = socket(PF_PACKET, SOCK_DGRAM, htons(ETH_P_EGETTY));
 	    if((conf.s) == -1)
 	    {

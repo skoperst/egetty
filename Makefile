@@ -11,7 +11,7 @@ endif
 OUTPUT_DIR := $(TARGET_DIR)
 
 CC=gcc
-CFLAGS+=-Os -Wall
+CFLAGS+=-Os -Wall 
 LDFLAGS+=-static
 LDLIBS+=-lutil
 
