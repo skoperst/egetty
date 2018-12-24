@@ -1104,7 +1104,7 @@ static int connect_specific_interface(char* iface,struct sk_buff *skb)
 
 }
 
-static int connect_to_listner(int num_of_interfaces,char** inters,struct sk_buff *skb)
+static int search_for_listener(int num_of_interfaces,char** inters,struct sk_buff *skb,char* iface)
 {
     int connect=0;
     for(int h=0;h<num_of_interfaces;h++)
@@ -1150,10 +1150,10 @@ static int connect_to_listner(int num_of_interfaces,char** inters,struct sk_buff
 
         skb = alloc_skb(1500);
         connect=console_devices((conf.s),(conf.ifindex),1,skb,NULL);
-
+        close(conf.s);
         if(connect){
 
-            printf("connected interface is: %s\n\n",inters[h]);
+            strcpy(iface,inters[h]);
             break;
 
         }
@@ -1253,7 +1253,7 @@ int main(int argc, char **argv)
 	conf.devices = 0;
 	conf.shell = 0;
 	
-	char iface[128];
+	char iface[128]=" ";
 	char mac[128];
 	char push_file[1024], push_dest_path[1024];
 	char pull_file[1024], pull_dest_path[1024];
@@ -1371,13 +1371,13 @@ int main(int argc, char **argv)
 	}
 
 	conf.devsocket = devsocket();
-    if(specific_interface==0){
+    if(!specific_interface){
     
-        connect_to_listner(num_of_interfaces,inters,skb);    
-    }else{
+        search_for_listener(num_of_interfaces,inters,skb,iface);    
+    }
     
         connect_specific_interface(iface,skb); 
-    }
+    
 
 	
 	skb = alloc_skb(1500);
