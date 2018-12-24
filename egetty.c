@@ -456,7 +456,7 @@ int main(int argc, char **argv, char **arge)
 			exit(1);
 		}
 	}
-	 printf("im here \n");
+
 	skb = alloc_skb(1500);
 
 	skb_reset(skb);
