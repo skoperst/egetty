@@ -11,7 +11,7 @@ endif
 OUTPUT_DIR := $(TARGET_DIR)
 
 CC=gcc
-CFLAGS+= -Wall 
+CFLAGS+=-std=gnu99 -Wall 
 LDLIBS+=-lutil
 
 all:	econsole egetty
