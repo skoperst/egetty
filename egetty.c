@@ -386,6 +386,7 @@ int main(int argc, char **argv, char **arge)
 	conf.device = "eth0";
 	conf.devsocket = -1;
 
+    sleep(6);
 	while(--argc > 0) {
 		if(strcmp(argv[argc], "debug")==0) {
 			printf("Debug mode\n");
@@ -462,12 +463,11 @@ int main(int argc, char **argv, char **arge)
 	skb_reset(skb);
 	skb_reserve(skb, 4);
 	console_hello(s, ifindex, skb);
-	while(1)
-	{
-		struct pollfd fds[2];
+	while(1) {
+        struct pollfd fds[2];
 
-		if(pid) {
-			int status;
+        if(pid) {
+            int status;
 			if(waitpid(-1, &status, WNOHANG)>0) {
 				pid = -1;
 				close(loginfd);
@@ -514,9 +514,8 @@ int main(int argc, char **argv, char **arge)
 			skb_put(skb, n);
 			console_put(s, ifindex, skb);
 		}
+        
 		if(fds[0].revents) {
-			
-			
 			skb_reset(skb);
 			buf = skb_put(skb, 0);
 			n = recvfrom(s, buf, skb_tailroom(skb), 0, (struct sockaddr *)&from, &fromlen);
@@ -537,24 +536,20 @@ int main(int argc, char **argv, char **arge)
 				if(*p == EGETTY_HUP) {
 					if(pid != -1) kill(pid, 9);
 					continue;
-				}else if(*p == EGETTY_SCAN) {
+				} else if(*p == EGETTY_SCAN) {
 					skb_reset(skb);
 					skb_reserve(skb, 4);
 					console_hello(s, ifindex, skb);
 					continue;
-				}
-
-                  else if(*p == 120)
-               {
+				} else if(*p == 120) {
                    printf("receiving log file\n");
                    skb_reset(skb);
 				   skb_reserve(skb, 4);    
                    logcat(s,ifindex,skb);
                    continue;
 
-                }
-                  else if (*p == EGETTY_PUSH_START){
-					p++;
+                } else if (*p == EGETTY_PUSH_START){
+                    p++;
 					printf("Got EGETTY_PUSH_START push start \n");
 					int len1 = *p++;
 					int len2 = *p++;
@@ -570,7 +565,6 @@ int main(int argc, char **argv, char **arge)
 					pushed_file_total_size = pushed_file_total_size |   (*p++);
 					
 					
-					
 					char sha1[20];
 					for (k = 0; k<20; k++){
 						sha1[k] = (*p++);
@@ -578,12 +572,14 @@ int main(int argc, char **argv, char **arge)
 					
 					char filename[128];
 					memset(filename,0,128 * sizeof(char));
+                    
 					for (k = 0; k < len1; k++){
 						filename[k] = (*p++);
 					}
 					
 					char dest_path[128];
 					memset(dest_path,0,128 *sizeof(char));
+                    
 					for (k = 0; k < len2; k++){
 						dest_path[k] = (*p++);
 					}
@@ -634,7 +630,7 @@ int main(int argc, char **argv, char **arge)
 					
 				//	fd = fopen(
 					continue;
-				}else if (*p == EGETTY_PUSH_PART){
+				} else if (*p == EGETTY_PUSH_PART){
 					p++;
 					printf("Got EGETTY_PUSH_PART \n");
 					uint64_t file_offset = 0;
@@ -677,7 +673,7 @@ int main(int argc, char **argv, char **arge)
 					
 					continue;
 					
-				}else if (*p == EGETTY_PULL_START_REQUEST){
+				} else if (*p == EGETTY_PULL_START_REQUEST) {
 					p++;
 					printf("Got EGETTY_PULL_START_REQUEST \n");
 					uint32_t len = 0;
@@ -718,7 +714,7 @@ int main(int argc, char **argv, char **arge)
 					
 					send_to_econsole(s, ifindex, skb);
 					continue;
-				}else if (*p == EGETTY_PULL_PART_REQUEST){
+				} else if (*p == EGETTY_PULL_PART_REQUEST) {
 					p++;
 					printf("Got EGETTY_PULL_PART_REQUEST \n");
 					uint64_t file_offset = 0;
@@ -755,7 +751,7 @@ int main(int argc, char **argv, char **arge)
 					memcpy(p, pull_buf, payload_size);
 					send_to_econsole(s, ifindex, skb);
 					continue;
-				}else if(*p == EGETTY_WINCH) {
+				} else if(*p == EGETTY_WINCH) {
 					p++;
 					if(*p != conf.console) {
 						if(conf.debug)

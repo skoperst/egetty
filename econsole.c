@@ -69,55 +69,36 @@ static void get_interfaces(char** inter_options)
     struct ifaddrs *addrs,*tmp;
     getifaddrs(&addrs);
     tmp = addrs;
-    while (tmp)
-    {
-        if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_PACKET)
-        {
-            strcpy(inter_options[t],tmp->ifa_name);
+    
+    while (tmp) {
+        if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_PACKET) {
+            strcpy(inter_options[t], tmp->ifa_name);
+            tmp = tmp->ifa_next;
+            t++;
         }
-
-        tmp = tmp->ifa_next;
-        t++;
     }
-
 }
 
 static int get_num_of_available_interfaces()
 {
-    int t=0;
+    int count = 0;
     struct ifaddrs *addrs = NULL,*tmp;
     
     if (getifaddrs(&addrs) == -1){
 		return 0;
 	}
     
-    tmp = addrs;
-    while (tmp)
-    {
-        if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_PACKET)
-        {
-            t++;
+    
+    //tmp = addrs;
+    while (addrs) {
+        if (addrs->ifa_addr && addrs->ifa_addr->sa_family == AF_PACKET) {
+            count++;
         }
 
-        tmp = tmp->ifa_next;
+        addrs = addrs->ifa_next;
     }
 
-    return t;
-
-}
-
-static char** set_interface_list(int num_of_interfaces)
-{
-
-    char** tmpinters=(char**)malloc(num_of_interfaces*sizeof(char*));
-    for(int b=0;b<num_of_interfaces;b++)
-    {
-
-        tmpinters[b]=(char*)malloc(100*sizeof(char));
-
-    }
-   
-    return tmpinters;
+    return count;
 }
 
 
@@ -1280,14 +1261,20 @@ int main(int argc, char **argv)
 	do_shell = 0;
 	do_pull = 0;
 	log=0;
-	argc--;
-	argv++;
+
 
 
     num_of_interfaces = get_num_of_available_interfaces();
-   	inters = set_interface_list(num_of_interfaces);
+    
+    inters = (char**)malloc(num_of_interfaces * sizeof(char*));
+    for(int b=0; b<num_of_interfaces; b++) {
+        inters[b]=(char*)malloc(512 * sizeof(char));
+    }
     get_interfaces(inters);
   
+  
+  	argc--;
+	argv++;
 	while(argc > 0){
 		if (strcmp(argv[0],"-i") == 0){
 			
@@ -1368,8 +1355,6 @@ int main(int argc, char **argv)
        count++;
 	}
 	
-
-
 
 	if ((do_devices + do_ping + do_shell + do_push + do_pull+log) != 1){
 		printf("Must select only 1 command \n");
