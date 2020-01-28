@@ -73,9 +73,9 @@ static void get_interfaces(char** inter_options)
     while (tmp) {
         if (tmp->ifa_addr && tmp->ifa_addr->sa_family == AF_PACKET) {
             strcpy(inter_options[t], tmp->ifa_name);
-            tmp = tmp->ifa_next;
             t++;
         }
+        tmp = tmp->ifa_next;
     }
 }
 
@@ -1263,13 +1263,14 @@ int main(int argc, char **argv)
 	log=0;
 
 
-
+    printf("getting # of interfaces \n");
     num_of_interfaces = get_num_of_available_interfaces();
     
     inters = (char**)malloc(num_of_interfaces * sizeof(char*));
     for(int b=0; b<num_of_interfaces; b++) {
         inters[b]=(char*)malloc(512 * sizeof(char));
     }
+    printf("get interfaces \n");
     get_interfaces(inters);
   
   
@@ -1362,10 +1363,12 @@ int main(int argc, char **argv)
 	}
 
 	conf.devsocket = devsocket();
+    printf("searching egetty interface \n");
     if(!specific_interface){//in case no interface specificed, we should search for one.
         search_egetty_interface(num_of_interfaces, inters, skb, iface, sizeof(iface));    
     }
 
+    printf("connecting specific interface: %s \n", iface);
     connect_specific_interface(iface,skb); 
 	
 	skb = alloc_skb(1500);
